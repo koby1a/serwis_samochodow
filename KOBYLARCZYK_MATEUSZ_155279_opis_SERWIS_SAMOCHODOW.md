@@ -7,10 +7,10 @@
 - Grupa laboratoryjna: **LAB_03**
 - Prowadzący: **dr inż. Anna Jasińska-Suwada oraz mgr inż. Jan Wojtas**
 
-
 Repozytorium GitHub (publiczne):  
-`https://github.com/koby1a/serwis-samochodow`  
+`https://github.com/koby1a/serwis-samochodow`
 
+Projekt będzie zaimplementowany w języku **C/C++**, zgodnie z wymaganiami przedmiotu.
 
 ## 2. Opis ogólny systemu
 
@@ -26,7 +26,6 @@ Serwis:
 Samochody (marki A–Z) pojawiają się w serwisie w **losowych chwilach**, również **poza godzinami pracy**.  
 Dla obsługiwanych marek realizowana jest ścieżka: rejestracja → diagnoza → naprawa → płatność → wyjazd.  
 Raport z przebiegu symulacji zapisywany jest do **plików tekstowych** (logi).
-
 
 ## 3. Role/procesy w systemie
 
@@ -72,7 +71,6 @@ W projekcie zostaną zaimplementowane procesy (ewentualnie z wątkami), odpowiad
     - w razie wykrycia dodatkowych usterek decyduje o rozszerzeniu zakresu napraw (ok. 80% akceptuje),
     - po naprawie płaci, odbiera kluczyki i opuszcza serwis.
 
-
 ## 4. Kolejki i stanowiska obsługi klienta
 
 W serwisie działają **3 stanowiska obsługi klienta**, z dynamicznym uruchamianiem:
@@ -85,7 +83,6 @@ W serwisie działają **3 stanowiska obsługi klienta**, z dynamicznym uruchamia
     - liczba klientów spadnie do **≤ 3** → trzecie stanowisko jest zamykane.
 
 Zasady te będą uwzględnione w logice obsługi kolejki i w testach.
-
 
 ## 5. Parametry symulacji i dane
 
@@ -100,7 +97,6 @@ Parametry konfigurowalne (np. przez plik konfiguracyjny lub argumenty programu):
 - cennik co najmniej **30 usług**.
 
 W testach możliwe będzie ustawienie stałego **ziarna generatora losowego**, aby wyniki były powtarzalne.
-
 
 ## 6. Planowane mechanizmy systemowe
 
@@ -123,9 +119,13 @@ Projekt będzie wykorzystywał co najmniej 4 z wymaganych konstrukcji, planowane
 5. **Pliki i logi**:
     - `open()`, `write()`, `read()`, `close()`, `creat()`, `unlink()` – zapis raportów z przebiegu symulacji.
 
-Wszystkie funkcje systemowe będą miały obsługę błędów przez `perror()` i `errno`.  
-Przy zakończeniu symulacji nastąpi usunięcie wszystkich struktur IPC (pamięć dzielona, semafory, kolejki).
+Dodatkowo:
 
+- wszystkie dane wprowadzane przez użytkownika będą **walidowane** (np. zakresy parametrów, liczby procesów/stanowisk),
+- tworzonym strukturom IPC (pamięć dzielona, semafory, kolejki komunikatów) zostaną nadane **minimalne wymagane prawa dostępu**,
+- po zakończeniu symulacji wszystkie struktury IPC zostaną **poprawnie usunięte**.
+
+Wszystkie funkcje systemowe będą miały obsługę błędów przez `perror()` i `errno`.
 
 ## 7. Scenariusze testowe (min. 4, planowane 5)
 
@@ -262,7 +262,6 @@ Przykładowy podział logów:
 
 Na podstawie tych logów będzie można zweryfikować poprawność działania oraz przeprowadzenie testów T1–T5.
 
-
 ## 9. Linki do kodu (do uzupełnienia po implementacji)
 
 Po zakończeniu implementacji w raporcie zostaną dodane linki do fragmentów kodu w repozytorium GitHub, obrazujących użycie wymaganych konstrukcji:
@@ -272,4 +271,3 @@ Po zakończeniu implementacji w raporcie zostaną dodane linki do fragmentów ko
 - komunikacja międzyprocesowa (kolejki komunikatów, pamięć dzielona, potoki/gniazda),
 - obsługa sygnałów (`sigaction()` / `signal()`),
 - obsługa błędów (`perror()`, `errno`).
-
