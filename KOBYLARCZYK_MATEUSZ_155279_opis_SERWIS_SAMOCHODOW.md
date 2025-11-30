@@ -8,7 +8,7 @@
 - Prowadzący: **dr inż. Anna Jasińska-Suwada oraz mgr inż. Jan Wojtas**
 
 Repozytorium GitHub (publiczne):  
-`https://github.com/koby1a/serwis-samochodow`
+`https://github.com/koby1a/serwis_samochodow`
 
 Projekt będzie zaimplementowany w języku **C/C++**, zgodnie z wymaganiami przedmiotu.
 
