@@ -1,11 +1,12 @@
-// src/model.cpp
+// model.cpp
 #include "model.h"
 
 int serwis_czy_marka_obslugiwana(char marka) {
-
+    // Zamiana malych liter na wielkie, zeby 'a' i 'A' byly traktowane tak samo
     if (marka >= 'a' && marka <= 'z') {
         marka = static_cast<char>(marka - 'a' + 'A');
     }
+
     switch (marka) {
         case 'A':
         case 'E':
@@ -13,39 +14,48 @@ int serwis_czy_marka_obslugiwana(char marka) {
         case 'O':
         case 'U':
         case 'Y':
-            return 1; //gdy marka jest obslugiwana
+            return 1; // marka obslugiwana
         default:
-            return 0; // gdy marka nie jest obslugiwana
+            return 0; // marka nieobslugiwana
     }
 }
 
-int serwis_wybierz_stanowisko(const Samochod &s, Stanowisko *stanowisko, int liczba_stanowisk) {
+int serwis_wybierz_stanowisko(const Samochod& s,
+                              Stanowisko* stanowiska,
+                              int liczba_stanowisk) {
+    // Ujednolicenie marki do wielkich liter
     char marka = s.marka;
     if (marka >= 'a' && marka <= 'z') {
         marka = static_cast<char>(marka - 'a' + 'A');
     }
 
+    // Jezeli marka w ogole nie jest obslugiwana, nie ma sensu szukac stanowiska
+    if (!serwis_czy_marka_obslugiwana(marka)) {
+        return -1;
+    }
+
+    // Szukamy pierwszego wolnego stanowiska, ktore moze obsluzyc dana marke
     for (int i = 0; i < liczba_stanowisk; ++i) {
-        Stanowisko& st = stanowisko[i];
+        Stanowisko& st = stanowiska[i];
 
         if (st.zajete) {
-            continue; // stanowisko zajęte => przejdź dalej
+            // stanowisko zajete -> szukamy dalej
+            continue;
         }
 
-        // Jeżeli to stanowisko "czy_tylko_UY", to obsłuży tylko U lub Y
         if (st.czy_tylko_UY) {
+            // To stanowisko (np. 8) obsluguje tylko U i Y
             if (marka == 'U' || marka == 'Y') {
-                return i; //indeks tablicy
+                return i; // indeks stanowiska w tablicy
             } else {
-                continue; // to stanowisko nie obsłuży tej marki
+                continue; // to stanowisko nie obsluzy tej marki
             }
         } else {
-            // Normalne stanowisko 1–7, obsługuje wszystkie dozwolone marki
-            // (A, E, I, O, U, Y)
+            // Normalne stanowisko (1–7) - skoro marka jest obslugiwana, to OK
             return i;
         }
     }
 
-    // Brak wolnego stanowiska dla tego samochodu
+    // Nie znaleziono wolnego, pasujacego stanowiska
     return -1;
 }
