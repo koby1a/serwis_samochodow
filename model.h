@@ -1,6 +1,12 @@
 // model.h
 #pragma once
 
+// Tryb pracy stanowiska (normalny / przyspieszony o 50%)
+enum SerwisTrybPracy {
+    SERWIS_TRYB_NORMALNY = 0,
+    SERWIS_TRYB_PRZYSPIESZONY = 1
+};
+
 struct Samochod {
     char marka;          // 'A'..'Z'
     int czas_przyjazdu;  // chwila przyjazdu (w jednostkach symulacji)
@@ -23,3 +29,11 @@ int serwis_czy_marka_obslugiwana(char marka);
 int serwis_wybierz_stanowisko(const Samochod& s,
                               Stanowisko* stanowiska,
                               int liczba_stanowisk);
+
+// Oblicza czas naprawy z uwzglednieniem dodatkowych usterek oraz trybu pracy.
+//  - czas_podstawowy >= 0
+//  - czas_dodatkowy >= 0 (0 gdy brak rozszerzenia zakresu)
+//  - tryb: normalny lub przyspieszony (czas o 50% krotszy - zaokraglenie w gore)
+int serwis_oblicz_czas_naprawy(int czas_podstawowy,
+                               int czas_dodatkowy,
+                               SerwisTrybPracy tryb);

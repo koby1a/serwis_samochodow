@@ -11,9 +11,28 @@ add_executable(serwis_samochodow
         serwis_ipc.cpp
 )
 
-# Proces kierowcy (osobny program wywolywany przez exec)
+# Proces kierowcy (generator zgloszen)
 add_executable(kierowca
         kierowca.cpp
+        model.cpp
+        serwis_ipc.cpp
+        komunikaty.h
+)
+
+# Proces pracownika serwisu
+add_executable(pracownik_serwisu
+        pracownik_serwisu.cpp
+        model.cpp
+        serwis_ipc.cpp
+        komunikaty.h
+)
+
+# Proces mechanika
+add_executable(mechanik
+        mechanik.cpp
+        model.cpp
+        serwis_ipc.cpp
+        komunikaty.h
 )
 
 # Testy jednostkowe logiki (bez IPC, bez procesow)

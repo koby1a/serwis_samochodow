@@ -1,5 +1,6 @@
 // model.cpp
 #include "model.h"
+#include <climits>  // INT_MAX
 
 int serwis_czy_marka_obslugiwana(char marka) {
     // Zamiana malych liter na wielkie, zeby 'a' i 'A' byly traktowane tak samo
@@ -58,4 +59,28 @@ int serwis_wybierz_stanowisko(const Samochod& s,
 
     // Nie znaleziono wolnego, pasujacego stanowiska
     return -1;
+}
+
+int serwis_oblicz_czas_naprawy(int czas_podstawowy,
+                               int czas_dodatkowy,
+                               SerwisTrybPracy tryb) {
+    // Pilnujemy, aby nie bylo ujemnych czasow
+    if (czas_podstawowy < 0) czas_podstawowy = 0;
+    if (czas_dodatkowy < 0) czas_dodatkowy = 0;
+
+    long long suma = static_cast<long long>(czas_podstawowy) +
+                     static_cast<long long>(czas_dodatkowy);
+
+    // Tryb przyspieszony: czas krotszy o 50% (dzielimy przez 2, zaokraglenie w gore)
+    if (tryb == SERWIS_TRYB_PRZYSPIESZONY) {
+        suma = (suma + 1) / 2; // np. 5 -> 3, 16 -> 8
+    }
+
+    if (suma < 0) {
+        suma = 0;
+    } else if (suma > INT_MAX) {
+        suma = INT_MAX;
+    }
+
+    return static_cast<int>(suma);
 }

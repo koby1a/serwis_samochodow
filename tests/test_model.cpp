@@ -4,7 +4,7 @@
 #include "../model.h"
 
 void test_serwis_czy_marka_obslugiwana() {
-    // Marki obslugiowane (duze litery)
+    // Marki obslugiwane (duze litery)
     assert(serwis_czy_marka_obslugiwana('A') == 1);
     assert(serwis_czy_marka_obslugiwana('E') == 1);
     assert(serwis_czy_marka_obslugiwana('I') == 1);
@@ -12,17 +12,17 @@ void test_serwis_czy_marka_obslugiwana() {
     assert(serwis_czy_marka_obslugiwana('U') == 1);
     assert(serwis_czy_marka_obslugiwana('Y') == 1);
 
-    // Marki obslugiowane (male litery - sprawdzamy konwersje)
+    // Marki obslugiwane (male litery - sprawdzamy konwersje)
     assert(serwis_czy_marka_obslugiwana('a') == 1);
     assert(serwis_czy_marka_obslugiwana('e') == 1);
     assert(serwis_czy_marka_obslugiwana('y') == 1);
 
-    // Marki nieobslugiowane
+    // Marki nieobslugiwane
     assert(serwis_czy_marka_obslugiwana('B') == 0);
     assert(serwis_czy_marka_obslugiwana('Z') == 0);
     assert(serwis_czy_marka_obslugiwana('x') == 0);
 
-    std::cout << "test_serwis_czy_marka_obslugiwana: OK\n";
+    std::cout << "test_serwis_czy_marka_obslugiwana: OK" << std::endl;
 }
 
 void test_serwis_wybierz_stanowisko() {
@@ -68,13 +68,42 @@ void test_serwis_wybierz_stanowisko() {
     idx = serwis_wybierz_stanowisko(s, stanowiska, 2);
     assert(idx == -1);
 
-    std::cout << "test_serwis_wybierz_stanowisko: OK\n";
+    std::cout << "test_serwis_wybierz_stanowisko: OK" << std::endl;
+}
+
+void test_serwis_oblicz_czas_naprawy() {
+    // Tryb normalny, bez dodatkowych usterek
+    int t = serwis_oblicz_czas_naprawy(10, 0, SERWIS_TRYB_NORMALNY);
+    assert(t == 10);
+
+    // Tryb normalny, z dodatkowymi usterkami
+    t = serwis_oblicz_czas_naprawy(10, 5, SERWIS_TRYB_NORMALNY);
+    assert(t == 15);
+
+    // Tryb przyspieszony, bez dodatkow: 10 -> 5
+    t = serwis_oblicz_czas_naprawy(10, 0, SERWIS_TRYB_PRZYSPIESZONY);
+    assert(t == 5);
+
+    // Tryb przyspieszony, z dodatkami: (10 + 6) / 2 = 8
+    t = serwis_oblicz_czas_naprawy(10, 6, SERWIS_TRYB_PRZYSPIESZONY);
+    assert(t == 8);
+
+    // Sprawdzenie zaokraglania w gore: (5 + 0) -> 3
+    t = serwis_oblicz_czas_naprawy(5, 0, SERWIS_TRYB_PRZYSPIESZONY);
+    assert(t == 3);
+
+    // Czasy ujemne sa traktowane jako 0
+    t = serwis_oblicz_czas_naprawy(-5, -3, SERWIS_TRYB_NORMALNY);
+    assert(t == 0);
+
+    std::cout << "test_serwis_oblicz_czas_naprawy: OK" << std::endl;
 }
 
 int main() {
     test_serwis_czy_marka_obslugiwana();
     test_serwis_wybierz_stanowisko();
+    test_serwis_oblicz_czas_naprawy();
 
-    std::cout << "Wszystkie testy modelu zaliczone.\n";
+    std::cout << "Wszystkie testy modelu zaliczone." << std::endl;
     return 0;
 }
