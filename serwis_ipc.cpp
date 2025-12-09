@@ -13,13 +13,14 @@
 // Globalne identyfikatory kolejek
 static int g_msgid_zgloszenia = -1;  // kolejka zgloszen (kierowca -> pracownik)
 static int g_msgid_zlecenia   = -1;  // kolejka zlecen (pracownik -> mechanik)
+static int g_msgid_raporty    = -1;  // kolejka raportow (mechanik -> kasjer)
 
 int serwis_ipc_init() {
 #if defined(__unix__) || defined(__APPLE__)
 
     std::cout << "[IPC] inicjalizacja struktur IPC (Unix)" << std::endl;
 
-    // KLODZ ZGLOSZEN (ftok z proj_id 'Z')
+    // KOLEJKA ZGLOSZEN (ftok z proj_id 'Z')
     if (g_msgid_zgloszenia == -1) {
         key_t key_zgloszenia = ftok(".", 'Z');
         if (key_zgloszenia == -1) {
@@ -57,6 +58,25 @@ int serwis_ipc_init() {
         std::cout << "[IPC] kolejka zlecen msgid = " << g_msgid_zlecenia << std::endl;
     }
 
+    // KOLEJKA RAPORTOW (ftok z proj_id 'R')
+    if (g_msgid_raporty == -1) {
+        key_t key_raporty = ftok(".", 'R');
+        if (key_raporty == -1) {
+            perror("[IPC] blad ftok dla kolejki raportow");
+            return SERWIS_IPC_ERR;
+        }
+
+        int msgflg = IPC_CREAT | 0600;
+        int msgid = msgget(key_raporty, msgflg);
+        if (msgid == -1) {
+            perror("[IPC] blad msgget dla kolejki raportow");
+            return SERWIS_IPC_ERR;
+        }
+
+        g_msgid_raporty = msgid;
+        std::cout << "[IPC] kolejka raportow msgid = " << g_msgid_raporty << std::endl;
+    }
+
     return SERWIS_IPC_OK;
 
 #else
@@ -64,6 +84,7 @@ int serwis_ipc_init() {
     std::cout << "[IPC] inicjalizacja struktur IPC (stub, brak IPC na tym systemie)" << std::endl;
     g_msgid_zgloszenia = -1;
     g_msgid_zlecenia   = -1;
+    g_msgid_raporty    = -1;
     return SERWIS_IPC_OK;
 
 #endif
@@ -90,6 +111,15 @@ void serwis_ipc_cleanup() {
             std::cout << "[IPC] kolejka zlecen usunieta" << std::endl;
         }
         g_msgid_zlecenia = -1;
+    }
+
+    if (g_msgid_raporty != -1) {
+        if (msgctl(g_msgid_raporty, IPC_RMID, nullptr) == -1) {
+            perror("[IPC] blad msgctl IPC_RMID dla kolejki raportow");
+        } else {
+            std::cout << "[IPC] kolejka raportow usunieta" << std::endl;
+        }
+        g_msgid_raporty = -1;
     }
 
 #else
@@ -243,6 +273,92 @@ int serwis_ipc_odbierz_zlecenie(Samochod& s,
 #else
 
     std::cout << "[IPC] odbierz_zlecenie (stub, brak IPC na tym systemie)" << std::endl;
+    return SERWIS_IPC_ERR;
+
+#endif
+}
+
+// ================== RAPORTY ==================
+
+int serwis_ipc_wyslij_raport(int id_klienta,
+                             int rzeczywisty_czas,
+                             int koszt_koncowy,
+                             const Samochod& s) {
+#if defined(__unix__) || defined(__APPLE__)
+
+    if (g_msgid_raporty == -1) {
+        std::cerr << "[IPC] wyslij_raport: kolejka nie jest zainicjalizowana" << std::endl;
+        return SERWIS_IPC_ERR;
+    }
+
+    MsgRaport msg{};
+    msg.mtype = SERWIS_MSGTYPE_RAPORT;
+    msg.id_klienta = id_klienta;
+    msg.rzeczywisty_czas = rzeczywisty_czas;
+    msg.koszt_koncowy = koszt_koncowy;
+    msg.s = s;
+
+    size_t msgsz = sizeof(msg) - sizeof(msg.mtype);
+
+    if (msgsnd(g_msgid_raporty, &msg, msgsz, 0) == -1) {
+        perror("[IPC] blad msgsnd (wyslij_raport)");
+        return SERWIS_IPC_ERR;
+    }
+
+    std::cout << "[IPC] wyslano raport (id_klienta = "
+              << id_klienta
+              << ", rzeczywisty_czas = " << rzeczywisty_czas
+              << ", koszt_koncowy = " << koszt_koncowy
+              << ")" << std::endl;
+
+    return SERWIS_IPC_OK;
+
+#else
+
+    std::cout << "[IPC] wyslij_raport (stub, brak IPC na tym systemie). "
+                 "Symulacja wyslania raportu dla klienta "
+              << id_klienta << std::endl;
+    return SERWIS_IPC_OK;
+
+#endif
+}
+
+int serwis_ipc_odbierz_raport(int& id_klienta,
+                              int& rzeczywisty_czas,
+                              int& koszt_koncowy,
+                              Samochod& s) {
+#if defined(__unix__) || defined(__APPLE__)
+
+    if (g_msgid_raporty == -1) {
+        std::cerr << "[IPC] odbierz_raport: kolejka nie jest zainicjalizowana" << std::endl;
+        return SERWIS_IPC_ERR;
+    }
+
+    MsgRaport msg{};
+    size_t msgsz = sizeof(msg) - sizeof(msg.mtype);
+
+    if (msgrcv(g_msgid_raporty, &msg, msgsz,
+               SERWIS_MSGTYPE_RAPORT, 0) == -1) {
+        perror("[IPC] blad msgrcv (odbierz_raport)");
+        return SERWIS_IPC_ERR;
+    }
+
+    id_klienta = msg.id_klienta;
+    rzeczywisty_czas = msg.rzeczywisty_czas;
+    koszt_koncowy = msg.koszt_koncowy;
+    s = msg.s;
+
+    std::cout << "[IPC] odebrano raport (id_klienta = "
+              << id_klienta
+              << ", rzeczywisty_czas = " << rzeczywisty_czas
+              << ", koszt_koncowy = " << koszt_koncowy
+              << ")" << std::endl;
+
+    return SERWIS_IPC_OK;
+
+#else
+
+    std::cout << "[IPC] odbierz_raport (stub, brak IPC na tym systemie)" << std::endl;
     return SERWIS_IPC_ERR;
 
 #endif

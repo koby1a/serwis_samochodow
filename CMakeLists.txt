@@ -35,7 +35,15 @@ add_executable(mechanik
         komunikaty.h
 )
 
-# Testy jednostkowe logiki (bez IPC, bez procesow)
+# Proces kasjera
+add_executable(kasjer
+        kasjer.cpp
+        model.cpp
+        serwis_ipc.cpp
+        komunikaty.h
+)
+
+# Testy jednostkowe logiki
 add_executable(test_model
         tests/test_model.cpp
         model.cpp

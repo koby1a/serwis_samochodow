@@ -34,9 +34,22 @@ int main() {
                   << ", przewidywany_czas = " << przewidywany_czas
                   << std::endl;
 
-        // TODO:
-        //  - na tym etapie mozemy zasymulowac naprawe (sleep)
-        //  - pozniej wysylamy raport do kasjera (trzecia kolejka)
+        // Na razie przyjmujemy, ze rzeczywisty czas = przewidywany
+        int rzeczywisty_czas = przewidywany_czas;
+
+        // Prosty model kosztu: np. 10 jednostek za kazda jednostke czasu
+        int koszt_koncowy = rzeczywisty_czas * 10;
+
+        std::cout << "[mechanik] wysylam raport: "
+                  << "id_klienta = " << id_klienta
+                  << ", rzeczywisty_czas = " << rzeczywisty_czas
+                  << ", koszt_koncowy = " << koszt_koncowy
+                  << std::endl;
+
+        if (serwis_ipc_wyslij_raport(id_klienta, rzeczywisty_czas, koszt_koncowy, s)
+            != SERWIS_IPC_OK) {
+            std::cerr << "[mechanik] blad wysylania raportu" << std::endl;
+            }
     }
 
     serwis_ipc_cleanup();
