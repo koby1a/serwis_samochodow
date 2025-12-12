@@ -1,4 +1,5 @@
 // pracownik_serwisu.cpp
+//test po re-instalu
 #include <iostream>
 #include <cstdlib>
 #include "model.h"
