@@ -104,3 +104,43 @@ int serwis_klient_akceptuje(int losowa_wartosc, int prog_odrzucenia) {
     return 1;
 }
 
+int serwis_klient_zgadza_sie_na_rozszerzenie(int losowa_wartosc, int prog_odmowy) {
+    // Walidacja danych wejsciowych
+    if (losowa_wartosc < 0 || losowa_wartosc > 99) {
+        return 0;
+    }
+
+    if (prog_odmowy < 0 || prog_odmowy > 100) {
+        return 0;
+    }
+
+    // Jesli losowa wartosc miesci sie w progu odmowy,
+    // klient NIE zgadza sie na rozszerzenie
+    if (losowa_wartosc < prog_odmowy) {
+        return 0;
+    }
+
+    // W przeciwnym wypadku klient zgadza sie na rozszerzenie
+    return 1;
+}
+
+int serwis_klient_akceptuje_warunki(int losowa_wartosc, int prog_odrzucenia) {
+    // Sprawdzenie poprawnosci danych
+    if (losowa_wartosc < 0 || losowa_wartosc > 99) {
+        return 0;
+    }
+
+    if (prog_odrzucenia < 0 || prog_odrzucenia > 100) {
+        return 0;
+    }
+
+    // Jesli losowa wartosc miesci sie w progu odrzucenia
+    // klient NIE akceptuje warunkow
+    if (losowa_wartosc < prog_odrzucenia) {
+        return 0;
+    }
+
+    // W przeciwnym wypadku klient akceptuje warunki
+    return 1;
+}
+

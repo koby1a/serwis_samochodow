@@ -113,6 +113,38 @@ void test_serwis_klient_akceptuje() {
     assert(serwis_klient_akceptuje(-1, 2) == 0);
     assert(serwis_klient_akceptuje(10, 200) == 0);
 }
+void test_serwis_klient_zgadza_sie_na_rozszerzenie() {
+    // 20% odmow
+
+    // Odmowa rozszerzenia
+    assert(serwis_klient_zgadza_sie_na_rozszerzenie(0, 20) == 0);
+    assert(serwis_klient_zgadza_sie_na_rozszerzenie(19, 20) == 0);
+
+    // Zgoda na rozszerzenie
+    assert(serwis_klient_zgadza_sie_na_rozszerzenie(20, 20) == 1);
+    assert(serwis_klient_zgadza_sie_na_rozszerzenie(80, 20) == 1);
+
+    // Walidacja
+    assert(serwis_klient_zgadza_sie_na_rozszerzenie(-5, 20) == 0);
+    assert(serwis_klient_zgadza_sie_na_rozszerzenie(10, -1) == 0);
+}
+
+void test_serwis_klient_akceptuje_warunki() {
+    // 2% odrzucen
+
+    // Odrzucenie warunkow
+    assert(serwis_klient_akceptuje_warunki(0, 2) == 0);
+    assert(serwis_klient_akceptuje_warunki(1, 2) == 0);
+
+    // Akceptacja warunkow
+    assert(serwis_klient_akceptuje_warunki(2, 2) == 1);
+    assert(serwis_klient_akceptuje_warunki(50, 2) == 1);
+
+    // Bledne dane
+    assert(serwis_klient_akceptuje_warunki(-1, 2) == 0);
+    assert(serwis_klient_akceptuje_warunki(10, 200) == 0);
+}
+
 
 
 int main() {
@@ -120,6 +152,8 @@ int main() {
     test_serwis_wybierz_stanowisko();
     test_serwis_oblicz_czas_naprawy();
     test_serwis_klient_akceptuje();
+    serwis_klient_zgadza_sie_na_rozszerzenie();
+    test_serwis_klient_akceptuje_warunki();
 
 
     std::cout << "Wszystkie testy modelu zaliczone." << std::endl;
