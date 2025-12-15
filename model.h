@@ -21,6 +21,21 @@ struct Stanowisko {
     Samochod aktualny;   // aktualnie obslugiwany samochod
 };
 
+// Struktura opisujaca pojedyncza usluge serwisowa
+struct UslugaSerwisowa {
+    int id;
+    const char* nazwa;
+    int cena;        // cena w zl
+    int czas;        // czas w minutach
+};
+
+// Zwraca wskaznik na cennik
+const UslugaSerwisowa* serwis_pobierz_cennik(int* liczba_uslug);
+
+// Oblicza koszt na podstawie listy id uslug
+int serwis_oblicz_koszt(const int* lista_uslug, int liczba_uslug);
+
+
 // Zwraca 1, jesli marka jest obslugiwana (A, E, I, O, U, Y), w przeciwnym razie 0.
 int serwis_czy_marka_obslugiwana(char marka);
 

@@ -70,6 +70,27 @@ void test_serwis_wybierz_stanowisko() {
 
     std::cout << "test_serwis_wybierz_stanowisko: OK" << std::endl;
 }
+void test_serwis_cennik() {
+    int liczba = 0;
+    const UslugaSerwisowa* cennik = serwis_pobierz_cennik(&liczba);
+
+    assert(cennik != nullptr);
+    assert(liczba >= 30);
+}
+
+void test_serwis_oblicz_koszt() {
+    int uslugi1[] = {1};
+    assert(serwis_oblicz_koszt(uslugi1, 1) == 150);
+
+    int uslugi2[] = {1, 2, 3};
+    assert(serwis_oblicz_koszt(uslugi2, 3) == 370);
+
+    int uslugi3[] = {999};
+    assert(serwis_oblicz_koszt(uslugi3, 1) == 0);
+
+    assert(serwis_oblicz_koszt(nullptr, 2) == 0);
+}
+
 
 void test_serwis_oblicz_czas_naprawy() {
     // Tryb normalny, bez dodatkowych usterek
@@ -149,6 +170,7 @@ void test_serwis_klient_akceptuje_warunki() {
 
 int main() {
     test_serwis_czy_marka_obslugiwana();
+    test_serwis_cennik();
     test_serwis_wybierz_stanowisko();
     test_serwis_oblicz_czas_naprawy();
     test_serwis_klient_akceptuje();
