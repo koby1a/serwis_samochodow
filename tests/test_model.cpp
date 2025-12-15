@@ -98,11 +98,29 @@ void test_serwis_oblicz_czas_naprawy() {
 
     std::cout << "test_serwis_oblicz_czas_naprawy: OK" << std::endl;
 }
+void test_serwis_klient_akceptuje() {
+    // 2% odrzucen
+
+    // Wartosc w zakresie odrzucenia
+    assert(serwis_klient_akceptuje(0, 2) == 0);
+    assert(serwis_klient_akceptuje(1, 2) == 0);
+
+    // Wartosc poza zakresem odrzucenia
+    assert(serwis_klient_akceptuje(2, 2) == 1);
+    assert(serwis_klient_akceptuje(50, 2) == 1);
+
+    // Walidacja danych
+    assert(serwis_klient_akceptuje(-1, 2) == 0);
+    assert(serwis_klient_akceptuje(10, 200) == 0);
+}
+
 
 int main() {
     test_serwis_czy_marka_obslugiwana();
     test_serwis_wybierz_stanowisko();
     test_serwis_oblicz_czas_naprawy();
+    test_serwis_klient_akceptuje();
+
 
     std::cout << "Wszystkie testy modelu zaliczone." << std::endl;
     return 0;

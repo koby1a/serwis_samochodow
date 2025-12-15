@@ -84,3 +84,23 @@ int serwis_oblicz_czas_naprawy(int czas_podstawowy,
 
     return static_cast<int>(suma);
 }
+int serwis_klient_akceptuje(int losowa_wartosc, int prog_odrzucenia) {
+    // Walidacja danych wejsciowych
+    if (losowa_wartosc < 0 || losowa_wartosc > 99) {
+        return 0;
+    }
+
+    if (prog_odrzucenia < 0 || prog_odrzucenia > 100) {
+        return 0;
+    }
+
+    // Jesli losowa wartosc miesci sie w progu odrzucenia,
+    // klient NIE akceptuje warunkow
+    if (losowa_wartosc < prog_odrzucenia) {
+        return 0;
+    }
+
+    // W przeciwnym wypadku klient akceptuje
+    return 1;
+}
+

@@ -37,3 +37,8 @@ int serwis_wybierz_stanowisko(const Samochod& s,
 int serwis_oblicz_czas_naprawy(int czas_podstawowy,
                                int czas_dodatkowy,
                                SerwisTrybPracy tryb);
+// Symuluje decyzje klienta o akceptacji warunkow naprawy
+// losowa_wartosc: liczba z zakresu 0..99
+// prog_odrzucenia: np. 2 oznacza 2% odrzucen
+int serwis_klient_akceptuje(int losowa_wartosc, int prog_odrzucenia);
+
