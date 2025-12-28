@@ -207,3 +207,39 @@ int serwis_klient_akceptuje_warunki(int losowa_wartosc, int prog_odrzucenia) {
     return 1;
 }
 
+int serwis_oblicz_czas_z_uslug(const int* lista_uslug,
+                               int liczba_uslug,
+                               int czas_dodatkowy,
+                               SerwisTrybPracy tryb) {
+    if (!lista_uslug || liczba_uslug <= 0) {
+        return 0;
+    }
+
+    int suma_czasu = 0;
+    int liczba_cennika = 0;
+    const UslugaSerwisowa* cennik = serwis_pobierz_cennik(&liczba_cennika);
+
+    // Sumujemy czasy z cennika
+    for (int i = 0; i < liczba_uslug; ++i) {
+        int id = lista_uslug[i];
+
+        for (int j = 0; j < liczba_cennika; ++j) {
+            if (cennik[j].id == id) {
+                suma_czasu += cennik[j].czas;
+                break;
+            }
+        }
+    }
+
+    // Dodajemy czas dodatkowy (np. rozszerzenie zakresu)
+    suma_czasu += czas_dodatkowy;
+
+    // Uwzgledniamy tryb pracy mechanika
+    if (tryb == SERWIS_TRYB_PRZYSPIESZONY) {
+        // Przyspieszenie o 50% -> czas dzielimy przez 2
+        suma_czasu = suma_czasu / 2;
+    }
+
+    return suma_czasu;
+}
+

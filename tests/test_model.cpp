@@ -167,6 +167,25 @@ void test_serwis_klient_akceptuje_warunki() {
 }
 
 
+void test_serwis_oblicz_czas_z_uslug() {
+    // Jedna usluga
+    int uslugi1[] = {1}; // wymiana_oleju -> 30
+    assert(serwis_oblicz_czas_z_uslug(uslugi1, 1, 0, SERWIS_TRYB_NORMALNY) == 30);
+
+    // Kilka uslug
+    int uslugi2[] = {1, 2, 3}; // 30 + 25 + 20 = 75
+    assert(serwis_oblicz_czas_z_uslug(uslugi2, 3, 0, SERWIS_TRYB_NORMALNY) == 75);
+
+    // Czas dodatkowy
+    assert(serwis_oblicz_czas_z_uslug(uslugi2, 3, 10, SERWIS_TRYB_NORMALNY) == 85);
+
+    // Tryb przyspieszony (50%)
+    assert(serwis_oblicz_czas_z_uslug(uslugi2, 3, 0, SERWIS_TRYB_PRZYSPIESZONY) == 37);
+
+    // Bledne dane
+    assert(serwis_oblicz_czas_z_uslug(nullptr, 3, 0, SERWIS_TRYB_NORMALNY) == 0);
+    assert(serwis_oblicz_czas_z_uslug(uslugi1, 0, 0, SERWIS_TRYB_NORMALNY) == 0);
+}
 
 int main() {
     test_serwis_czy_marka_obslugiwana();
@@ -174,10 +193,14 @@ int main() {
     test_serwis_wybierz_stanowisko();
     test_serwis_oblicz_czas_naprawy();
     test_serwis_klient_akceptuje();
-    serwis_klient_zgadza_sie_na_rozszerzenie();
+    test_serwis_klient_zgadza_sie_na_rozszerzenie();
     test_serwis_klient_akceptuje_warunki();
+    test_serwis_oblicz_czas_z_uslug();
+
 
 
     std::cout << "Wszystkie testy modelu zaliczone." << std::endl;
     return 0;
 }
+
+

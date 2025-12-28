@@ -68,4 +68,14 @@ int serwis_klient_zgadza_sie_na_rozszerzenie(int losowa_wartosc, int prog_odmowy
 // prog_odrzucenia: np. 2 oznacza 2% odrzucen
 int serwis_klient_akceptuje_warunki(int losowa_wartosc, int prog_odrzucenia);
 
+// Oblicza laczny czas naprawy na podstawie listy uslug
+// lista_uslug  - tablica ID uslug
+// liczba_uslug - ile uslug
+// czas_dodatkowy - np. za rozszerzenie naprawy
+// tryb - normalny lub przyspieszony
+int serwis_oblicz_czas_z_uslug(const int* lista_uslug,
+                               int liczba_uslug,
+                               int czas_dodatkowy,
+                               SerwisTrybPracy tryb);
+
 

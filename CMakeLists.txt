@@ -48,3 +48,4 @@ add_executable(test_model
         tests/test_model.cpp
         model.cpp
 )
+
