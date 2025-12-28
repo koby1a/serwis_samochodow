@@ -78,4 +78,11 @@ int serwis_oblicz_czas_z_uslug(const int* lista_uslug,
                                int czas_dodatkowy,
                                SerwisTrybPracy tryb);
 
+// Zwraca wskaznik na usluge o danym ID albo nullptr, jesli brak
+const UslugaSerwisowa* serwis_znajdz_usluge(int id);
+
+// Zwraca wskaznik na usluge o danym ID albo nullptr, jesli brak
+const UslugaSerwisowa* serwis_znajdz_usluge(int id);
+
+
 

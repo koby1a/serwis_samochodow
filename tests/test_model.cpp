@@ -180,12 +180,28 @@ void test_serwis_oblicz_czas_z_uslug() {
     assert(serwis_oblicz_czas_z_uslug(uslugi2, 3, 10, SERWIS_TRYB_NORMALNY) == 85);
 
     // Tryb przyspieszony (50%)
-    assert(serwis_oblicz_czas_z_uslug(uslugi2, 3, 0, SERWIS_TRYB_PRZYSPIESZONY) == 37);
+    assert(serwis_oblicz_czas_z_uslug(uslugi2, 3, 0, SERWIS_TRYB_PRZYSPIESZONY) == 38);
+
+    // Parzyste 80 -> 40
+    assert(serwis_oblicz_czas_z_uslug(uslugi2, 3, 5, SERWIS_TRYB_PRZYSPIESZONY) == 40); // 75+5=80 -> 40
+
 
     // Bledne dane
     assert(serwis_oblicz_czas_z_uslug(nullptr, 3, 0, SERWIS_TRYB_NORMALNY) == 0);
     assert(serwis_oblicz_czas_z_uslug(uslugi1, 0, 0, SERWIS_TRYB_NORMALNY) == 0);
 }
+
+void test_serwis_znajdz_usluge() {
+    const UslugaSerwisowa* u = serwis_znajdz_usluge(1);
+    assert(u != nullptr);
+    assert(u->id == 1);
+    assert(u->cena == 150);
+    assert(u->czas == 30);
+
+    // Nieistniejace ID
+    assert(serwis_znajdz_usluge(999) == nullptr);
+}
+
 
 int main() {
     test_serwis_czy_marka_obslugiwana();
@@ -196,6 +212,8 @@ int main() {
     test_serwis_klient_zgadza_sie_na_rozszerzenie();
     test_serwis_klient_akceptuje_warunki();
     test_serwis_oblicz_czas_z_uslug();
+    test_serwis_znajdz_usluge();
+
 
 
 

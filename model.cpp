@@ -42,28 +42,41 @@ const UslugaSerwisowa* serwis_pobierz_cennik(int* liczba_uslug) {
     return CENNIK;
 }
 
+const UslugaSerwisowa* serwis_znajdz_usluge(int id) {
+    int liczba_cennika = 0;
+    const UslugaSerwisowa* cennik = serwis_pobierz_cennik(&liczba_cennika);
+
+    if (!cennik || liczba_cennika <= 0) {
+        return nullptr;
+    }
+
+    for (int i = 0; i < liczba_cennika; ++i) {
+        if (cennik[i].id == id) {
+            return &cennik[i];
+        }
+    }
+
+    return nullptr;
+}
+
+
 int serwis_oblicz_koszt(const int* lista_uslug, int liczba_uslug) {
     if (!lista_uslug || liczba_uslug <= 0) {
         return 0;
     }
 
     int suma = 0;
-    int liczba_cennika = 0;
-    const UslugaSerwisowa* cennik = serwis_pobierz_cennik(&liczba_cennika);
 
     for (int i = 0; i < liczba_uslug; ++i) {
-        int id = lista_uslug[i];
-
-        for (int j = 0; j < liczba_cennika; ++j) {
-            if (cennik[j].id == id) {
-                suma += cennik[j].cena;
-                break;
-            }
+        const UslugaSerwisowa* u = serwis_znajdz_usluge(lista_uslug[i]);
+        if (u) {
+            suma += u->cena;
         }
     }
 
     return suma;
 }
+
 
 int serwis_czy_marka_obslugiwana(char marka) {
     // Zamiana malych liter na wielkie, zeby 'a' i 'A' byly traktowane tak samo
@@ -216,18 +229,12 @@ int serwis_oblicz_czas_z_uslug(const int* lista_uslug,
     }
 
     int suma_czasu = 0;
-    int liczba_cennika = 0;
-    const UslugaSerwisowa* cennik = serwis_pobierz_cennik(&liczba_cennika);
 
     // Sumujemy czasy z cennika
     for (int i = 0; i < liczba_uslug; ++i) {
-        int id = lista_uslug[i];
-
-        for (int j = 0; j < liczba_cennika; ++j) {
-            if (cennik[j].id == id) {
-                suma_czasu += cennik[j].czas;
-                break;
-            }
+        const UslugaSerwisowa* u = serwis_znajdz_usluge(lista_uslug[i]);
+        if (u) {
+            suma_czasu += u->czas;
         }
     }
 
@@ -237,9 +244,12 @@ int serwis_oblicz_czas_z_uslug(const int* lista_uslug,
     // Uwzgledniamy tryb pracy mechanika
     if (tryb == SERWIS_TRYB_PRZYSPIESZONY) {
         // Przyspieszenie o 50% -> czas dzielimy przez 2
-        suma_czasu = suma_czasu / 2;
+        suma_czasu = (suma_czasu + 1) / 2;
     }
 
     return suma_czasu;
 }
+
+
+
 
