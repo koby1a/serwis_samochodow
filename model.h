@@ -84,5 +84,24 @@ const UslugaSerwisowa* serwis_znajdz_usluge(int id);
 // Zwraca wskaznik na usluge o danym ID albo nullptr, jesli brak
 const UslugaSerwisowa* serwis_znajdz_usluge(int id);
 
+// Prosty deterministyczny generator (LCG) - zwraca liczbe 0..UINT_MAX
+unsigned int serwis_losuj_u32(unsigned int* seed);
+
+// Losuje liczbe calkowita z przedzialu [min_wartosc, max_wartosc]
+int serwis_losuj_int(unsigned int* seed, int min_wartosc, int max_wartosc);
+
+
+// Losuje liste uslug (ID) bez duplikatow.
+// out_uslugi: tablica na ID uslug
+// max_out: pojemnosc tablicy
+// seed: wskaznik na seed generatora
+// min_liczba_uslug / max_liczba_uslug: zakres liczby wylosowanych uslug
+// Zwraca liczbe wylosowanych uslug (0 w razie bledu).
+int serwis_losuj_liste_uslug(int* out_uslugi,
+                             int max_out,
+                             unsigned int* seed,
+                             int min_liczba_uslug,
+                             int max_liczba_uslug);
+
 
 

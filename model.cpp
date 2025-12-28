@@ -251,5 +251,91 @@ int serwis_oblicz_czas_z_uslug(const int* lista_uslug,
 }
 
 
+unsigned int serwis_losuj_u32(unsigned int* seed) {
+    // Prosty LCG: powtarzalny na kazdej platformie (w przeciwienstwie do rand())
+    // Parametry jak w wielu klasycznych implementacjach
+    if (!seed) {
+        return 0u;
+    }
+    *seed = (*seed * 1664525u) + 1013904223u;
+    return *seed;
+}
+
+int serwis_losuj_int(unsigned int* seed, int min_wartosc, int max_wartosc) {
+    if (!seed) {
+        return min_wartosc;
+    }
+    if (min_wartosc > max_wartosc) {
+        int tmp = min_wartosc;
+        min_wartosc = max_wartosc;
+        max_wartosc = tmp;
+    }
+
+    unsigned int r = serwis_losuj_u32(seed);
+    int zakres = (max_wartosc - min_wartosc + 1);
+    if (zakres <= 0) {
+        return min_wartosc;
+    }
+
+    int wynik = min_wartosc + static_cast<int>(r % static_cast<unsigned int>(zakres));
+    return wynik;
+}
+
+int serwis_losuj_liste_uslug(int* out_uslugi,
+                             int max_out,
+                             unsigned int* seed,
+                             int min_liczba_uslug,
+                             int max_liczba_uslug) {
+    if (!out_uslugi || max_out <= 0 || !seed) {
+        return 0;
+    }
+
+    if (min_liczba_uslug < 0) min_liczba_uslug = 0;
+    if (max_liczba_uslug < 0) max_liczba_uslug = 0;
+    if (min_liczba_uslug > max_liczba_uslug) {
+        int tmp = min_liczba_uslug;
+        min_liczba_uslug = max_liczba_uslug;
+        max_liczba_uslug = tmp;
+    }
+
+    // Ile mamy uslug w cenniku?
+    int liczba_cennika = 0;
+    (void)serwis_pobierz_cennik(&liczba_cennika);
+    if (liczba_cennika <= 0) {
+        return 0;
+    }
+
+    // Ograniczamy maksymalna liczbe losowanych uslug
+    if (max_liczba_uslug > liczba_cennika) max_liczba_uslug = liczba_cennika;
+    if (max_liczba_uslug > max_out) max_liczba_uslug = max_out;
+    if (min_liczba_uslug > max_liczba_uslug) min_liczba_uslug = max_liczba_uslug;
+
+    int ile = serwis_losuj_int(seed, min_liczba_uslug, max_liczba_uslug);
+
+    // Losujemy ID z zakresu 1..liczba_cennika bez duplikatow
+    int zapisane = 0;
+    while (zapisane < ile) {
+        int id = serwis_losuj_int(seed, 1, liczba_cennika);
+
+        // sprawdzamy duplikaty
+        int duplikat = 0;
+        for (int i = 0; i < zapisane; ++i) {
+            if (out_uslugi[i] == id) {
+                duplikat = 1;
+                break;
+            }
+        }
+        if (duplikat) {
+            continue;
+        }
+
+        out_uslugi[zapisane] = id;
+        zapisane++;
+    }
+
+    return zapisane;
+}
+
+
 
 

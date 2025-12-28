@@ -202,6 +202,35 @@ void test_serwis_znajdz_usluge() {
     assert(serwis_znajdz_usluge(999) == nullptr);
 }
 
+void test_serwis_losuj_liste_uslug() {
+    unsigned int seed = 12345u;
+
+    int uslugi[10];
+    int n = serwis_losuj_liste_uslug(uslugi, 10, &seed, 2, 5);
+
+    // Liczba uslug w zakresie
+    assert(n >= 2 && n <= 5);
+
+    // ID poprawne i bez duplikatow
+    for (int i = 0; i < n; ++i) {
+        assert(uslugi[i] >= 1 && uslugi[i] <= 30);
+        for (int j = i + 1; j < n; ++j) {
+            assert(uslugi[i] != uslugi[j]);
+        }
+    }
+
+    // Determinizm: przy tym samym seed wynik powinien byc taki sam
+    unsigned int seed2 = 12345u;
+    int uslugi2[10];
+    int n2 = serwis_losuj_liste_uslug(uslugi2, 10, &seed2, 2, 5);
+
+    assert(n2 == n);
+    for (int i = 0; i < n; ++i) {
+        assert(uslugi2[i] == uslugi[i]);
+    }
+}
+
+
 
 int main() {
     test_serwis_czy_marka_obslugiwana();
@@ -213,6 +242,7 @@ int main() {
     test_serwis_klient_akceptuje_warunki();
     test_serwis_oblicz_czas_z_uslug();
     test_serwis_znajdz_usluge();
+    test_serwis_losuj_liste_uslug();
 
 
 
@@ -220,5 +250,6 @@ int main() {
     std::cout << "Wszystkie testy modelu zaliczone." << std::endl;
     return 0;
 }
+
 
 
