@@ -231,6 +231,41 @@ void test_serwis_losuj_liste_uslug() {
 }
 
 
+void test_serwis_utworz_oferte() {
+    unsigned int seed = 777u;
+
+    OfertaNaprawy o{};
+    int ok = serwis_utworz_oferte(&o, &seed, 2, 5, 0, SERWIS_TRYB_NORMALNY);
+
+    assert(ok == 1);
+    assert(o.liczba_uslug >= 2 && o.liczba_uslug <= 5);
+    assert(o.koszt > 0);
+    assert(o.czas > 0);
+
+    // Bez duplikatow i ID w zakresie
+    for (int i = 0; i < o.liczba_uslug; ++i) {
+        assert(o.uslugi_id[i] >= 1 && o.uslugi_id[i] <= 30);
+        for (int j = i + 1; j < o.liczba_uslug; ++j) {
+            assert(o.uslugi_id[i] != o.uslugi_id[j]);
+        }
+    }
+
+    // Determinizm: to samo seed -> ta sama oferta
+    unsigned int seed2 = 777u;
+    OfertaNaprawy o2{};
+    int ok2 = serwis_utworz_oferte(&o2, &seed2, 2, 5, 0, SERWIS_TRYB_NORMALNY);
+
+    assert(ok2 == 1);
+    assert(o2.liczba_uslug == o.liczba_uslug);
+    assert(o2.koszt == o.koszt);
+    assert(o2.czas == o.czas);
+    for (int i = 0; i < o.liczba_uslug; ++i) {
+        assert(o2.uslugi_id[i] == o.uslugi_id[i]);
+    }
+}
+
+
+
 
 int main() {
     test_serwis_czy_marka_obslugiwana();
@@ -243,6 +278,7 @@ int main() {
     test_serwis_oblicz_czas_z_uslug();
     test_serwis_znajdz_usluge();
     test_serwis_losuj_liste_uslug();
+    test_serwis_utworz_oferte();
 
 
 

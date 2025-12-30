@@ -337,5 +337,46 @@ int serwis_losuj_liste_uslug(int* out_uslugi,
 }
 
 
+int serwis_utworz_oferte(OfertaNaprawy* out_oferta,
+                         unsigned int* seed,
+                         int min_liczba_uslug,
+                         int max_liczba_uslug,
+                         int czas_dodatkowy,
+                         SerwisTrybPracy tryb) {
+    if (!out_oferta || !seed) {
+        return 0;
+    }
+
+    // Zerowanie
+    out_oferta->liczba_uslug = 0;
+    out_oferta->koszt = 0;
+    out_oferta->czas = 0;
+    for (int i = 0; i < 10; ++i) {
+        out_oferta->uslugi_id[i] = 0;
+    }
+
+    // Losujemy liste uslug (max 10)
+    int n = serwis_losuj_liste_uslug(out_oferta->uslugi_id,
+                                    10,
+                                    seed,
+                                    min_liczba_uslug,
+                                    max_liczba_uslug);
+    if (n <= 0) {
+        return 0;
+    }
+
+    out_oferta->liczba_uslug = n;
+
+    // Liczymy koszt i czas na bazie wylosowanych uslug
+    out_oferta->koszt = serwis_oblicz_koszt(out_oferta->uslugi_id, n);
+    out_oferta->czas = serwis_oblicz_czas_z_uslug(out_oferta->uslugi_id,
+                                                  n,
+                                                  czas_dodatkowy,
+                                                  tryb);
+
+    return 1;
+}
+
+
 
 

@@ -104,4 +104,23 @@ int serwis_losuj_liste_uslug(int* out_uslugi,
                              int max_liczba_uslug);
 
 
+// Prosta struktura oferty naprawy dla klienta
+struct OfertaNaprawy {
+    int liczba_uslug;
+    int uslugi_id[10];   // max 10 uslug w ofercie
+    int koszt;
+    int czas;            // w minutach
+};
+
+// Tworzy oferte naprawy:
+// - losuje liste uslug (bez duplikatow)
+// - liczy koszt i czas
+// Zwraca 1 gdy OK, 0 gdy blad.
+int serwis_utworz_oferte(OfertaNaprawy* out_oferta,
+                         unsigned int* seed,
+                         int min_liczba_uslug,
+                         int max_liczba_uslug,
+                         int czas_dodatkowy,
+                         SerwisTrybPracy tryb);
+
 
