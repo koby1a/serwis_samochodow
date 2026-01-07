@@ -277,6 +277,95 @@ int serwis_ipc_odbierz_zlecenie(Samochod& s,
 
 #endif
 }
+int serwis_ipc_wyslij_zlecenie(const Samochod& s,
+                               int id_klienta,
+                               const OfertaNaprawy& oferta) {
+#if defined(__unix__) || defined(__APPLE__)
+
+    if (g_msgid_zlecenia == -1) {
+        std::cerr << "[IPC] wyslij_zlecenie: kolejka nie jest zainicjalizowana" << std::endl;
+        return SERWIS_IPC_ERR;
+    }
+
+    MsgZlecenie msg{};
+    msg.mtype = SERWIS_MSGTYPE_ZLECENIE;
+    msg.s = s;
+    msg.id_klienta = id_klienta;
+
+    msg.liczba_uslug = oferta.liczba_uslug;
+    for (int i = 0; i < 10; ++i) {
+        msg.uslugi_id[i] = oferta.uslugi_id[i];
+    }
+    msg.koszt_szacowany = oferta.koszt;
+    msg.czas_szacowany = oferta.czas;
+
+    size_t msgsz = sizeof(msg) - sizeof(msg.mtype);
+
+    if (msgsnd(g_msgid_zlecenia, &msg, msgsz, 0) == -1) {
+        perror("[IPC] blad msgsnd (wyslij_zlecenie)");
+        return SERWIS_IPC_ERR;
+    }
+
+    std::cout << "[IPC] wyslano zlecenie (id_klienta = " << id_klienta
+              << ", marka = " << s.marka
+              << ", czas_szacowany = " << msg.czas_szacowany
+              << ", koszt_szacowany = " << msg.koszt_szacowany
+              << ", liczba_uslug = " << msg.liczba_uslug
+              << ")" << std::endl;
+
+    return SERWIS_IPC_OK;
+
+#else
+    std::cout << "[IPC] wyslij_zlecenie (stub). id_klienta=" << id_klienta
+              << ", czas=" << oferta.czas << ", koszt=" << oferta.koszt << std::endl;
+    return SERWIS_IPC_OK;
+#endif
+}
+
+int serwis_ipc_odbierz_zlecenie(Samochod& s,
+                                int& id_klienta,
+                                OfertaNaprawy& oferta) {
+#if defined(__unix__) || defined(__APPLE__)
+
+    if (g_msgid_zlecenia == -1) {
+        std::cerr << "[IPC] odbierz_zlecenie: kolejka nie jest zainicjalizowana" << std::endl;
+        return SERWIS_IPC_ERR;
+    }
+
+    MsgZlecenie msg{};
+    size_t msgsz = sizeof(msg) - sizeof(msg.mtype);
+
+    if (msgrcv(g_msgid_zlecenia, &msg, msgsz,
+               SERWIS_MSGTYPE_ZLECENIE, 0) == -1) {
+        perror("[IPC] blad msgrcv (odbierz_zlecenie)");
+        return SERWIS_IPC_ERR;
+               }
+
+    s = msg.s;
+    id_klienta = msg.id_klienta;
+
+    oferta.liczba_uslug = msg.liczba_uslug;
+    for (int i = 0; i < 10; ++i) {
+        oferta.uslugi_id[i] = msg.uslugi_id[i];
+    }
+    oferta.koszt = msg.koszt_szacowany;
+    oferta.czas = msg.czas_szacowany;
+
+    std::cout << "[IPC] odebrano zlecenie (id_klienta = " << id_klienta
+              << ", marka = " << s.marka
+              << ", czas_szacowany = " << oferta.czas
+              << ", koszt_szacowany = " << oferta.koszt
+              << ", liczba_uslug = " << oferta.liczba_uslug
+              << ")" << std::endl;
+
+    return SERWIS_IPC_OK;
+
+#else
+    std::cout << "[IPC] odbierz_zlecenie (stub)" << std::endl;
+    return SERWIS_IPC_ERR;
+#endif
+}
+
 
 // ================== RAPORTY ==================
 

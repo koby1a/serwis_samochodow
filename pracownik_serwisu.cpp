@@ -5,6 +5,8 @@
 #include "model.h"
 #include "serwis_ipc.h"
 
+
+
 int main() {
     std::cout << "[pracownik_serwisu] start procesu pracownika serwisu" << std::endl;
 
@@ -68,4 +70,43 @@ int main() {
 
     std::cout << "[pracownik_serwisu] koniec procesu pracownika serwisu" << std::endl;
     return EXIT_SUCCESS;
+
+
+    //-------------------
+    unsigned int seed = 12345u; // prosty seed dla procesu pracownika
+
+    // ... po odebraniu samochodu s i sprawdzeniu marki:
+
+    OfertaNaprawy oferta{};
+    int ok_oferta = serwis_utworz_oferte(&oferta,
+                                         &seed,
+                                         2, 5,           // min/max liczba uslug
+                                         0,              // czas_dodatkowy na razie 0
+                                         SERWIS_TRYB_NORMALNY);
+
+    if (!ok_oferta) {
+        std::cout << "[pracownik_serwisu] nie udalo sie utworzyc oferty" << std::endl;
+        continue;
+    }
+
+    // 2% klientow nie akceptuje warunkow
+    int los = serwis_losuj_int(&seed, 0, 99);
+    if (!serwis_klient_akceptuje_warunki(los, 2)) {
+        std::cout << "[pracownik_serwisu] klient odrzucil oferte (id_klienta = "
+                  << nastepne_id_klienta << ")" << std::endl;
+        continue;
+    }
+
+    int id_klienta = nastepne_id_klienta++;
+
+    std::cout << "[pracownik_serwisu] oferta zaakceptowana: id_klienta=" << id_klienta
+              << ", czas=" << oferta.czas
+              << ", koszt=" << oferta.koszt
+              << ", liczba_uslug=" << oferta.liczba_uslug
+              << std::endl;
+
+    if (serwis_ipc_wyslij_zlecenie(s, id_klienta, oferta) != SERWIS_IPC_OK) {
+        std::cerr << "[pracownik_serwisu] blad wysylania zlecenia" << std::endl;
+    }
+
 }

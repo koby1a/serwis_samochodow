@@ -47,3 +47,12 @@ int serwis_ipc_odbierz_raport(int& id_klienta,
                               int& rzeczywisty_czas,
                               int& koszt_koncowy,
                               Samochod& s);
+// --- Kolejka zlecen (pracownik_serwisu -> mechanik) ---
+
+int serwis_ipc_wyslij_zlecenie(const Samochod& s,
+                               int id_klienta,
+                               const OfertaNaprawy& oferta);
+
+int serwis_ipc_odbierz_zlecenie(Samochod& s,
+                                int& id_klienta,
+                                OfertaNaprawy& oferta);
