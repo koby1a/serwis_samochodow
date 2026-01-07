@@ -22,8 +22,13 @@ struct MsgZgloszenie {
 struct MsgZlecenie {
     long mtype;           // SERWIS_MSGTYPE_ZLECENIE
     Samochod s;           // dane samochodu
-    int przewidywany_czas;
     int id_klienta;
+
+    // Oferta naprawy (z cennika)
+    int liczba_uslug;
+    int uslugi_id[10];
+    int koszt_szacowany;
+    int czas_szacowany;
 };
 
 // Komunikat: mechanik -> kasjer
@@ -32,18 +37,5 @@ struct MsgRaport {
     int id_klienta;
     int rzeczywisty_czas;
     int koszt_koncowy;
-    Samochod s;           // opcjonalnie: dane auta (zeby kasjer wiedzial co to bylo)
-};
-
-// Komunikat: pracownik_serwisu -> mechanik
-struct MsgZlecenie {
-    long mtype;           // SERWIS_MSGTYPE_ZLECENIE
-    Samochod s;           // dane samochodu
-    int id_klienta;
-
-    // Oferta naprawy (z cennika)
-    int liczba_uslug;
-    int uslugi_id[10];
-    int koszt_szacowany;
-    int czas_szacowany;
+    Samochod s;           // dane auta
 };
