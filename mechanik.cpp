@@ -1,6 +1,7 @@
 // mechanik.cpp
 #include <iostream>
 #include <cstdlib>
+#include <fstream>
 #include "model.h"
 #include "serwis_ipc.h"
 
@@ -12,9 +13,12 @@
 // ================== ZMIENNE GLOBALNE MECHANIKA ==================
 
 static SerwisTrybPracy g_tryb_pracy = SERWIS_TRYB_NORMALNY;
-static bool g_stanowisko_otwarte = true;          // false -> nie przyjmujemy nowych zlecen
+static bool g_stanowisko_otwarte = true;          // false -> nie przyjmuje nowych zlecen
 static bool g_zamknij_po_biezacej = false;        // po zakonczeniu biezacego zlecenia zamykamy
 static bool g_pozar = false;                      // sygnal4 - natychmiastowe zakonczenie
+
+// Seed do deterministycznego losowania w procesie mechanika
+static unsigned int g_seed_mechanik = 98765u;
 
 // ================== OBSLUGA SYGNALOW (tylko Unix) ==================
 
@@ -86,6 +90,16 @@ void mechanik_zarejestruj_sygnaly() {
               << std::endl;
 }
 
+static void mechanik_zapisz_pid() {
+    std::ofstream f("mechanik_pid.txt", std::ios::trunc);
+    if (f.is_open()) {
+        f << getpid() << std::endl;
+        std::cout << "[mechanik] zapisano PID do pliku mechanik_pid.txt" << std::endl;
+    } else {
+        std::cerr << "[mechanik] nie moge zapisac mechanik_pid.txt" << std::endl;
+    }
+}
+
 #endif // Unix
 
 // ================== MAIN ==================
@@ -101,7 +115,8 @@ int main() {
 #if defined(__unix__) || defined(__APPLE__)
     mechanik_zarejestruj_sygnaly();
     std::cout << "[mechanik] moj PID = " << getpid()
-              << " (uzyj kill, aby wyslac sygnaly na Linux)" << std::endl;
+              << " (uzyj kill lub programu kierownik na Linux)" << std::endl;
+    mechanik_zapisz_pid();
 #else
     std::cout << "[mechanik] system nie-Unix - sygnaly sa wylaczone (stub)" << std::endl;
 #endif
@@ -139,12 +154,33 @@ int main() {
                   << ", tryb_pracy=" << (g_tryb_pracy == SERWIS_TRYB_NORMALNY ? "NORMALNY" : "PRZYSPIESZONY")
                   << std::endl;
 
-        // Rzeczywisty czas na razie bierzemy z oferty, ale uwzgledniamy tryb pracy mechanika
-        // (jesli kierownik przyspieszy, to czas realny moze byc krotszy)
-        int rzeczywisty_czas = serwis_oblicz_czas_naprawy(oferta.czas, 0, g_tryb_pracy);
+        // ================== 20% dodatkowych usterek ==================
 
-        // Koszt na razie taki jak w ofercie (pozniej doliczymy dodatkowe usterki 20%)
-        int koszt_koncowy = oferta.koszt;
+        int czas_dodatkowy = 0;
+        int koszt_dodatkowy = 0;
+
+        int los_usterka = serwis_losuj_int(&g_seed_mechanik, 0, 99);
+        if (los_usterka < 20) {
+            std::cout << "[mechanik] wykryto dodatkowe usterki, proponuje rozszerzenie naprawy"
+                      << std::endl;
+
+            int los_klient = serwis_losuj_int(&g_seed_mechanik, 0, 99);
+            if (serwis_klient_zgadza_sie_na_rozszerzenie(los_klient, 20)) {
+                czas_dodatkowy = serwis_losuj_int(&g_seed_mechanik, 10, 60);     // minuty
+                koszt_dodatkowy = serwis_losuj_int(&g_seed_mechanik, 100, 500);  // zl
+
+                std::cout << "[mechanik] klient zgodzil sie na rozszerzenie: +"
+                          << czas_dodatkowy << " min, +"
+                          << koszt_dodatkowy << " zl" << std::endl;
+            } else {
+                std::cout << "[mechanik] klient odrzucil rozszerzenie naprawy" << std::endl;
+            }
+        }
+
+        // ================== Rzeczywisty czas i koszt ==================
+
+        int rzeczywisty_czas = serwis_oblicz_czas_naprawy(oferta.czas, czas_dodatkowy, g_tryb_pracy);
+        int koszt_koncowy = oferta.koszt + koszt_dodatkowy;
 
         std::cout << "[mechanik] wysylam raport: id_klienta=" << id_klienta
                   << ", rzeczywisty_czas=" << rzeczywisty_czas
