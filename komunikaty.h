@@ -3,28 +3,29 @@
 
 #include "model.h"
 
-// Typ komunikatu dla zgloszen od kierowcy do pracownika serwisu
+// mtype dla zgloszen: kierowca -> pracownik_serwisu
 const long SERWIS_MSGTYPE_ZGLOSZENIE = 1L;
 
-// Typ komunikatu dla zlecen od pracownika serwisu do mechanika
-const long SERWIS_MSGTYPE_ZLECENIE = 2L;
-
-// Typ komunikatu dla raportow od mechanika do kasjera
+// mtype dla raportow: mechanik -> kasjer
 const long SERWIS_MSGTYPE_RAPORT = 3L;
+
+// Baza mtype dla zlecen: mtype = SERWIS_MTYPE_ZLECENIE_BASE + stanowisko_id (1..8)
+const long SERWIS_MTYPE_ZLECENIE_BASE = 100L;
 
 // Komunikat: kierowca -> pracownik_serwisu
 struct MsgZgloszenie {
-    long mtype;      // musi byc pierwsze pole w strukturze
-    Samochod s;      // dane samochodu
+    long mtype;
+    Samochod s;
 };
 
-// Komunikat: pracownik_serwisu -> mechanik
+// Komunikat: pracownik_serwisu -> mechanik (routing po mtype)
 struct MsgZlecenie {
-    long mtype;           // SERWIS_MSGTYPE_ZLECENIE
-    Samochod s;           // dane samochodu
+    long mtype;           // SERWIS_MTYPE_ZLECENIE_BASE + stanowisko_id
+    Samochod s;
     int id_klienta;
+    int stanowisko_id;    // 1..8
 
-    // Oferta naprawy (z cennika)
+    // Oferta naprawy
     int liczba_uslug;
     int uslugi_id[10];
     int koszt_szacowany;
@@ -37,5 +38,6 @@ struct MsgRaport {
     int id_klienta;
     int rzeczywisty_czas;
     int koszt_koncowy;
-    Samochod s;           // dane auta
+    int stanowisko_id;    // 1..8
+    Samochod s;
 };

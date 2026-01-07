@@ -1,51 +1,69 @@
 // kierownik.cpp
 #include <iostream>
 #include <fstream>
+#include <string>
 #include <cstdlib>
 
 #if defined(__unix__) || defined(__APPLE__)
-    #include <csignal>   // SIGUSR1, SIGUSR2, SIGTERM, SIGINT
-    #include <sys/types.h>
-    #include <signal.h>  // kill
-    #include <unistd.h>  // sleep
+    #include <csignal>
+    #include <signal.h>
+    #include <unistd.h>
 #endif
 
-static int serwis_wczytaj_pid_z_pliku(const char* nazwa_pliku) {
-    std::ifstream f(nazwa_pliku);
-    if (!f.is_open()) {
-        return -1;
-    }
+static int serwis_wczytaj_pid_stanowiska(int stanowisko_id) {
+    std::string nazwa = "mechanik_" + std::to_string(stanowisko_id) + "_pid.txt";
+    std::ifstream f(nazwa.c_str());
+    if (!f.is_open()) return -1;
     long long pid = -1;
     f >> pid;
-    if (pid <= 0) {
-        return -1;
-    }
+    if (pid <= 0) return -1;
     return static_cast<int>(pid);
 }
 
 int main() {
-    std::cout << "[kierownik] start procesu kierownika" << std::endl;
+    std::cout << "[kierownik] start" << std::endl;
 
 #if defined(__unix__) || defined(__APPLE__)
-    int pid_mechanik = serwis_wczytaj_pid_z_pliku("mechanik_pid.txt");
-    if (pid_mechanik <= 0) {
-        std::cerr << "[kierownik] nie moge wczytac PID z mechanik_pid.txt" << std::endl;
-        std::cerr << "[kierownik] uruchom najpierw mechanika na Linuxie" << std::endl;
-        return EXIT_FAILURE;
-    }
-
-    std::cout << "[kierownik] PID mechanika = " << pid_mechanik << std::endl;
 
     std::cout << "[kierownik] MENU:" << std::endl;
-    std::cout << "  1 - sygnal1: zamknij stanowisko po biezacej naprawie (SIGUSR1)" << std::endl;
-    std::cout << "  2 - sygnal2: przyspiesz o 50% (SIGUSR2)" << std::endl;
-    std::cout << "  3 - sygnal3: powrot do normalnego (SIGTERM)" << std::endl;
-    std::cout << "  4 - sygnal4: POZAR, natychmiast stop (SIGINT)" << std::endl;
+    std::cout << "  wybierz stanowisko 1..8, potem:" << std::endl;
+    std::cout << "  1 - sygnal1: zamknij po biezacej (SIGUSR1)" << std::endl;
+    std::cout << "  2 - sygnal2: przyspiesz 50% (SIGUSR2)" << std::endl;
+    std::cout << "  3 - sygnal3: normalny (SIGTERM)" << std::endl;
+    std::cout << "  4 - sygnal4: pozar (SIGINT)" << std::endl;
     std::cout << "  0 - wyjscie" << std::endl;
 
     while (true) {
-        std::cout << "[kierownik] wybierz akcje: ";
+        int stanowisko_id = 0;
+        std::cout << "[kierownik] stanowisko (1..8): ";
+        std::cin >> stanowisko_id;
+
+        if (!std::cin.good()) {
+            std::cin.clear();
+            std::cin.ignore(10000, '\n');
+            continue;
+        }
+
+        if (stanowisko_id == 0) {
+            std::cout << "[kierownik] koniec" << std::endl;
+            break;
+        }
+
+        if (stanowisko_id < 1 || stanowisko_id > 8) {
+            std::cout << "[kierownik] zly numer stanowiska" << std::endl;
+            continue;
+        }
+
+        int pid = serwis_wczytaj_pid_stanowiska(stanowisko_id);
+        if (pid <= 0) {
+            std::cout << "[kierownik] nie moge wczytac PID dla stanowiska "
+                      << stanowisko_id << " (sprawdz plik mechanik_" << stanowisko_id
+                      << "_pid.txt)" << std::endl;
+            continue;
+        }
+
         int wybor = -1;
+        std::cout << "[kierownik] akcja (1..4, 0=wyjscie): ";
         std::cin >> wybor;
 
         if (!std::cin.good()) {
@@ -55,7 +73,7 @@ int main() {
         }
 
         if (wybor == 0) {
-            std::cout << "[kierownik] koniec pracy kierownika" << std::endl;
+            std::cout << "[kierownik] koniec" << std::endl;
             break;
         }
 
@@ -69,21 +87,20 @@ int main() {
             continue;
         }
 
-        if (kill(pid_mechanik, sig) == -1) {
-            perror("[kierownik] blad kill()");
+        if (kill(pid, sig) == -1) {
+            perror("[kierownik] kill()");
         } else {
-            std::cout << "[kierownik] wyslano sygnal do mechanika" << std::endl;
+            std::cout << "[kierownik] wyslano sygnal do stanowiska=" << stanowisko_id
+                      << ", pid=" << pid << std::endl;
         }
 
-        // Mala przerwa zeby logi byly czytelne
         sleep(1);
     }
 
     return EXIT_SUCCESS;
 
 #else
-    std::cout << "[kierownik] system nie-Unix - kill/sygnaly sa niedostepne (stub)" << std::endl;
-    std::cout << "[kierownik] uruchom to na Linuxie, wtedy bedzie prawdziwe sterowanie" << std::endl;
+    std::cout << "[kierownik] system nie-Unix - brak kill/sygnalow (stub)" << std::endl;
     return EXIT_SUCCESS;
 #endif
 }
