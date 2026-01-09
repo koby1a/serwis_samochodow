@@ -16,7 +16,7 @@ add_library(serwis_core
         model.cpp
         serwis_ipc.cpp
         stanowiska_status.cpp
-        logger.cpp
+        logger.cppl
 )
 
 target_include_directories(serwis_core PUBLIC
