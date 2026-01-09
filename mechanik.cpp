@@ -5,6 +5,7 @@
 #include <string>
 #include "model.h"
 #include "serwis_ipc.h"
+#include "stanowiska_status.h"
 
 #if defined(__unix__) || defined(__APPLE__)
     #include <csignal>
@@ -94,6 +95,10 @@ int main(int argc, char** argv) {
 
     std::cout << "[mechanik] start, stanowisko_id=" << stanowisko_id << std::endl;
 
+    // Przy starcie: uznajemy stanowisko za otwarte
+    serwis_stanowisko_usun_zamkniete(stanowisko_id);
+    serwis_stanowisko_usun_prosbe_zamkniecia(stanowisko_id);
+
     if (serwis_ipc_init() != SERWIS_IPC_OK) {
         std::cerr << "[mechanik] blad ipc_init" << std::endl;
         return EXIT_FAILURE;
@@ -110,6 +115,10 @@ int main(int argc, char** argv) {
     const int MAKS_ZLECEN = 200;
 
     for (int i = 0; i < MAKS_ZLECEN; ++i) {
+        if (serwis_pozar_jest()) {
+            std::cout << "[mechanik] wykryto pozar.flag -> koniec" << std::endl;
+            break;
+        }
         if (g_pozar) {
             std::cout << "[mechanik] pozar -> koniec" << std::endl;
             break;
@@ -171,8 +180,14 @@ int main(int argc, char** argv) {
             std::cerr << "[mechanik] blad wysylki raportu" << std::endl;
         }
 
-        if (g_zamknij_po_biezacej) {
+        // Zamkniecie po biezacej naprawie:
+        // - ustawiamy flag zamkniete
+        // - usuwamy prosbe
+        // - konczymy prace
+        if (g_zamknij_po_biezacej || serwis_stanowisko_ma_prosbe_zamkniecia(stanowisko_id)) {
             std::cout << "[mechanik] zamykam stanowisko po biezacej naprawie" << std::endl;
+            serwis_stanowisko_ustaw_zamkniete(stanowisko_id);
+            serwis_stanowisko_usun_prosbe_zamkniecia(stanowisko_id);
             g_stanowisko_otwarte = false;
         }
     }
