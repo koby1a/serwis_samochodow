@@ -79,7 +79,7 @@ static void mechanik_zapisz_pid(int stanowisko_id) {
     if (f.is_open()) {
         f << getpid() << std::endl;
         std::cout << "[mechanik] zapisano PID do pliku " << nazwa << std::endl;
-        serwis_logf("mechanik", "zapisano pid do pliku %s", nazwa.c_str());
+        serwis_logf("mechanik", "zapisano pid do %s", nazwa.c_str());
     } else {
         std::cerr << "[mechanik] nie moge zapisac pliku PID" << std::endl;
         serwis_log("mechanik", "nie moge zapisac pliku PID");
@@ -88,31 +88,32 @@ static void mechanik_zapisz_pid(int stanowisko_id) {
 
 #endif
 
-static std::string serwis_get_arg_str(int argc, char** argv, const std::string& key, const std::string& def) {
+static std::string serwis_parse_str(int argc, char** argv, const std::string& key, const std::string& domyslna) {
     for (int i = 1; i + 1 < argc; ++i) {
         if (std::string(argv[i]) == key) {
             return std::string(argv[i + 1]);
         }
     }
-    return def;
+    return domyslna;
+}
+
+static int serwis_parse_int(int argc, char** argv, const std::string& key, int domyslna) {
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::string(argv[i]) == key) {
+            return std::atoi(argv[i + 1]);
+        }
+    }
+    return domyslna;
 }
 
 int main(int argc, char** argv) {
-    int stanowisko_id = 1;
-
-    for (int i = 1; i + 1 < argc; ++i) {
-        if (std::string(argv[i]) == "--id") {
-            stanowisko_id = std::atoi(argv[i + 1]);
-        }
-    }
-
+    int stanowisko_id = serwis_parse_int(argc, argv, "--id", 1);
     if (stanowisko_id < 1 || stanowisko_id > 8) {
         std::cerr << "[mechanik] zly --id, poprawny zakres 1..8" << std::endl;
         return EXIT_FAILURE;
     }
 
-    // Logger
-    std::string log_path = serwis_get_arg_str(argc, argv, "--log", "raport_symulacji.log");
+    std::string log_path = serwis_parse_str(argc, argv, "--log", "raport_symulacji.log");
     serwis_logger_set_file(log_path.c_str());
 
     std::cout << "[mechanik] start, stanowisko_id=" << stanowisko_id << std::endl;
@@ -134,7 +135,7 @@ int main(int argc, char** argv) {
     serwis_logf("mechanik", "pid=%d", static_cast<int>(getpid()));
     mechanik_zapisz_pid(stanowisko_id);
 #else
-    std::cout << "[mechanik] system nie-Unix - sygnaly sa wylaczone (stub)" << std::endl;
+    std::cout << "[mechanik] system nie-Unix - sygnaly wylaczone (stub)" << std::endl;
     serwis_log("mechanik", "system nie-Unix - sygnaly wylaczone (stub)");
 #endif
 
@@ -143,12 +144,12 @@ int main(int argc, char** argv) {
     for (int i = 0; i < MAKS_ZLECEN; ++i) {
         if (serwis_pozar_jest()) {
             std::cout << "[mechanik] wykryto pozar.flag -> koniec" << std::endl;
-            serwis_logf("mechanik", "pozarf lag wykryty, stanowisko=%d -> koniec", stanowisko_id);
+            serwis_logf("mechanik", "pozar.flag wykryty stanowisko=%d -> koniec", stanowisko_id);
             break;
         }
         if (g_pozar) {
             std::cout << "[mechanik] pozar -> koniec" << std::endl;
-            serwis_logf("mechanik", "poz ar sygnal, stanowisko=%d -> koniec", stanowisko_id);
+            serwis_logf("mechanik", "pozar sygnal stanowisko=%d -> koniec", stanowisko_id);
             break;
         }
         if (!g_stanowisko_otwarte) {
@@ -182,14 +183,14 @@ int main(int argc, char** argv) {
                     stanowisko_id, id_klienta, s.marka, oferta.czas, oferta.koszt,
                     (g_tryb_pracy == SERWIS_TRYB_NORMALNY ? "NORMALNY" : "PRZYSPIESZONY"));
 
-        // 20% dodatkowych usterek + decyzja klienta
+        // 20% dodatkowe usterki
         int czas_dodatkowy = 0;
         int koszt_dodatkowy = 0;
 
         int los_usterka = serwis_losuj_int(&g_seed_mechanik, 0, 99);
         if (los_usterka < 20) {
             std::cout << "[mechanik] wykryto dodatkowe usterki" << std::endl;
-            serwis_logf("mechanik", "stanowisko=%d wykryto dodatkowe usterki", stanowisko_id);
+            serwis_logf("mechanik", "stanowisko=%d dodatkowe usterki", stanowisko_id);
 
             int los_klient = serwis_losuj_int(&g_seed_mechanik, 0, 99);
             if (serwis_klient_zgadza_sie_na_rozszerzenie(los_klient, 20)) {
@@ -223,6 +224,9 @@ int main(int argc, char** argv) {
         if (serwis_ipc_wyslij_raport(id_klienta, rzeczywisty_czas, koszt_koncowy, stanowisko_id, s) != SERWIS_IPC_OK) {
             std::cerr << "[mechanik] blad wysylki raportu" << std::endl;
             serwis_logf("mechanik", "blad wysylki raportu stanowisko=%d id_klienta=%d", stanowisko_id, id_klienta);
+        } else {
+            // Statystyki: wykonana naprawa (wyslano raport)
+            serwis_stat_inc_wykonane_naprawy();
         }
 
         // Zamkniecie po biezacej naprawie (sygnal1) albo plik close.req
@@ -232,7 +236,6 @@ int main(int argc, char** argv) {
 
             serwis_stanowisko_ustaw_zamkniete(stanowisko_id);
             serwis_stanowisko_usun_prosbe_zamkniecia(stanowisko_id);
-
             g_stanowisko_otwarte = false;
         }
     }

@@ -1,17 +1,22 @@
 // kasjer.cpp
 #include <iostream>
 #include <cstdlib>
+#include <string>
 #include "model.h"
 #include "serwis_ipc.h"
 #include "logger.h"
 
-int main(int argc, char** argv) {
-    std::string log_path = "raport_symulacji.log";
+static std::string serwis_parse_str(int argc, char** argv, const std::string& key, const std::string& domyslna) {
     for (int i = 1; i + 1 < argc; ++i) {
-        if (std::string(argv[i]) == "--log") {
-            log_path = argv[i + 1];
+        if (std::string(argv[i]) == key) {
+            return std::string(argv[i + 1]);
         }
     }
+    return domyslna;
+}
+
+int main(int argc, char** argv) {
+    std::string log_path = serwis_parse_str(argc, argv, "--log", "raport_symulacji.log");
     serwis_logger_set_file(log_path.c_str());
 
     std::cout << "[kasjer] start" << std::endl;
@@ -32,7 +37,7 @@ int main(int argc, char** argv) {
         int stanowisko_id = 0;
         Samochod s{};
 
-        std::cout << "[kasjer] czekalm na raport" << std::endl;
+        std::cout << "[kasjer] czekam na raport" << std::endl;
 
         if (serwis_ipc_odbierz_raport(id_klienta, rzeczywisty_czas, koszt_koncowy, stanowisko_id, s) != SERWIS_IPC_OK) {
             std::cerr << "[kasjer] blad odbioru raportu" << std::endl;
@@ -49,6 +54,9 @@ int main(int argc, char** argv) {
 
         serwis_logf("kasjer", "platnosc id_klienta=%d stanowisko=%d marka=%c czas=%d koszt=%d",
                     id_klienta, stanowisko_id, s.marka, rzeczywisty_czas, koszt_koncowy);
+
+        // Statystyki: platnosc zrealizowana
+        serwis_stat_inc_platnosci();
     }
 
     serwis_ipc_cleanup();

@@ -18,13 +18,13 @@ static const int T1 = 60;
 static const int K1 = 3;
 static const int K2 = 5;
 
-static std::string serwis_get_arg_str(int argc, char** argv, const std::string& key, const std::string& def) {
+static std::string serwis_parse_str(int argc, char** argv, const std::string& key, const std::string& domyslna) {
     for (int i = 1; i + 1 < argc; ++i) {
         if (std::string(argv[i]) == key) {
             return std::string(argv[i + 1]);
         }
     }
-    return def;
+    return domyslna;
 }
 
 static int serwis_czy_w_godzinach(int t) {
@@ -60,6 +60,7 @@ static int serwis_aktualizuj_okienka(int aktywne_okienka, int dl_kolejki) {
 }
 
 static int serwis_stanowisko_dostepne(int id) {
+    // Dostepne tylko gdy nie ma prosby o zamkniecie i nie jest zamkniete
     if (serwis_stanowisko_ma_prosbe_zamkniecia(id)) return 0;
     if (serwis_stanowisko_jest_zamkniete(id)) return 0;
     return 1;
@@ -68,6 +69,7 @@ static int serwis_stanowisko_dostepne(int id) {
 static int serwis_wybierz_stanowisko_dla_marki(char marka, unsigned int* seed) {
     if (marka >= 'a' && marka <= 'z') marka = static_cast<char>(marka - 'a' + 'A');
 
+    // U/Y: probujemy 8 (jesli dostepne), inaczej 1..7
     if (marka == 'U' || marka == 'Y') {
         int r = serwis_losuj_int(seed, 0, 99);
         if (r < 40 && serwis_stanowisko_dostepne(8)) {
@@ -75,6 +77,7 @@ static int serwis_wybierz_stanowisko_dla_marki(char marka, unsigned int* seed) {
         }
     }
 
+    // Round-robin po 1..7, ale pomijamy niedostepne
     static int rr = 1;
     for (int probe = 0; probe < 7; ++probe) {
         int cand = rr;
@@ -83,6 +86,7 @@ static int serwis_wybierz_stanowisko_dla_marki(char marka, unsigned int* seed) {
         if (serwis_stanowisko_dostepne(cand)) return cand;
     }
 
+    // Jesli U/Y i 8 jednak dostepne, moze jeszcze tu
     if ((marka == 'U' || marka == 'Y') && serwis_stanowisko_dostepne(8)) {
         return 8;
     }
@@ -91,8 +95,7 @@ static int serwis_wybierz_stanowisko_dla_marki(char marka, unsigned int* seed) {
 }
 
 int main(int argc, char** argv) {
-    // Logger
-    std::string log_path = serwis_get_arg_str(argc, argv, "--log", "raport_symulacji.log");
+    std::string log_path = serwis_parse_str(argc, argv, "--log", "raport_symulacji.log");
     serwis_logger_set_file(log_path.c_str());
 
     std::cout << "[pracownik_serwisu] start" << std::endl;
@@ -117,24 +120,18 @@ int main(int argc, char** argv) {
     for (int iter = 0; iter < MAKS_ZGLOSZEN; ++iter) {
         if (serwis_pozar_jest()) {
             std::cout << "[pracownik_serwisu] pozar.flag -> koniec" << std::endl;
-            serwis_log("pracownik", "poz ar.flag -> koniec");
+            serwis_log("pracownik", "pozar.flag -> koniec");
             break;
         }
 
         Samochod s{};
         std::cout << "[pracownik_serwisu] czekam na zgloszenie" << std::endl;
-        serwis_log("pracownik", "czekam na zgloszenie");
 
         if (serwis_ipc_odbierz_zgloszenie(s) != SERWIS_IPC_OK) {
             std::cerr << "[pracownik_serwisu] blad odbioru zgloszenia" << std::endl;
             serwis_log("pracownik", "blad odbioru zgloszenia");
             break;
         }
-
-        std::cout << "[pracownik_serwisu] zgloszenie: marka=" << s.marka
-                  << ", czas_przyjazdu=" << s.czas_przyjazdu
-                  << ", krytyczna=" << s.krytyczna
-                  << std::endl;
 
         serwis_logf("pracownik", "zgloszenie marka=%c czas_przyjazdu=%d krytyczna=%d",
                     s.marka, s.czas_przyjazdu, s.krytyczna);
@@ -148,6 +145,7 @@ int main(int argc, char** argv) {
                           << do_otwarcia << ") -> odjezdza" << std::endl;
 
                 serwis_logf("pracownik", "odrzut poza_godzinami do_otwarcia=%d", do_otwarcia);
+                serwis_stat_inc_odrzucone_poza_godzinami();
                 continue;
             }
 
@@ -172,6 +170,7 @@ int main(int argc, char** argv) {
         if (!serwis_czy_marka_obslugiwana(s.marka)) {
             std::cout << "[pracownik_serwisu] marka nieobslugiwana -> klient odjezdza" << std::endl;
             serwis_logf("pracownik", "odrzut marka=%c nieobslugiwana", s.marka);
+            serwis_stat_inc_odrzucone_marka();
 
             dl_kolejki--;
             aktywne_okienka = serwis_aktualizuj_okienka(aktywne_okienka, dl_kolejki);
@@ -189,22 +188,24 @@ int main(int argc, char** argv) {
             continue;
         }
 
-        // 2% odrzuca
+        // 2% odrzuca warunki
         int los = serwis_losuj_int(&seed, 0, 99);
         if (!serwis_klient_akceptuje_warunki(los, 2)) {
             std::cout << "[pracownik_serwisu] klient odrzucil oferte -> odjezdza" << std::endl;
             serwis_logf("pracownik", "odrzut oferta (2%%) los=%d", los);
+            serwis_stat_inc_odrzucone_oferta();
 
             dl_kolejki--;
             aktywne_okienka = serwis_aktualizuj_okienka(aktywne_okienka, dl_kolejki);
             continue;
         }
 
-        // Wybor stanowiska z uwzglednieniem zamknietych
+        // Wybor stanowiska (z pomijaniem zamknietych)
         int stanowisko_id = serwis_wybierz_stanowisko_dla_marki(s.marka, &seed);
         if (stanowisko_id == -1) {
             std::cout << "[pracownik_serwisu] brak dostepnych stanowisk -> klient odjezdza" << std::endl;
             serwis_log("pracownik", "brak dostepnych stanowisk -> odrzut");
+            serwis_stat_inc_brak_stanowiska();
 
             dl_kolejki--;
             aktywne_okienka = serwis_aktualizuj_okienka(aktywne_okienka, dl_kolejki);
@@ -227,6 +228,8 @@ int main(int argc, char** argv) {
             serwis_logf("pracownik", "blad wysylki zlecenia id_klienta=%d stanowisko=%d", id_klienta, stanowisko_id);
             break;
         }
+
+        serwis_stat_inc_wyslane_zlecenia();
 
         dl_kolejki--;
         aktywne_okienka = serwis_aktualizuj_okienka(aktywne_okienka, dl_kolejki);
