@@ -43,9 +43,11 @@ int main() {
         int h = (s.sim_time_min / 60) % 24;
         int m = s.sim_time_min % 60;
         std::cout << ui_yellow() << "CZAS SYMULACJI: "
-                  << (h < 10 ? "0" : "") << h << ":"
-                  << (m < 10 ? "0" : "") << m
-                  << ui_reset() << "\n\n";
+                  ;
+        if (h < 10) std::cout << "0";
+        std::cout << h << ":";
+        if (m < 10) std::cout << "0";
+        std::cout << m << ui_reset() << "\n\n";
 
         for (int id = 1; id <= 8; ++id) {
             const auto& st = s.st[id];

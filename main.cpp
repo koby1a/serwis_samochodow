@@ -10,6 +10,12 @@
 #include "serwis_ipc.h"
 #include "logger.h"
 
+static volatile sig_atomic_t g_stop = 0;
+
+static void on_sig(int sig) {
+    if (sig == SIGINT || sig == SIGTERM) g_stop = 1;
+}
+
 static pid_t spawnp(const char* prog, const std::vector<std::string>& args) {
     pid_t pid = fork();
     if (pid == 0) {
@@ -89,6 +95,13 @@ int main(int argc, char** argv) {
 
     if (serwis_ipc_init() != SERWIS_IPC_OK) return 1;
 
+    struct sigaction sa{};
+    sa.sa_handler = on_sig;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    if (sigaction(SIGINT, &sa, nullptr) == -1) perror("[main] sigaction SIGINT");
+    if (sigaction(SIGTERM, &sa, nullptr) == -1) perror("[main] sigaction SIGTERM");
+
     SimConfig cfg;
     load_config(args(argc, argv, "--config", ""), cfg);
     cfg.n = argi(argc, argv, "--n", cfg.n);
@@ -139,6 +152,10 @@ int main(int argc, char** argv) {
     while (true) {
         int status;
         pid_t p = waitpid(-1, &status, WNOHANG);
+        if (g_stop) {
+            serwis_set_pozar(1);
+            break;
+        }
         if (serwis_get_pozar()) break;
         if (p == kierowca_pid) break;
         usleep((useconds_t)cfg.sim_tick_ms * 1000u);

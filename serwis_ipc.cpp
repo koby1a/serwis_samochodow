@@ -212,11 +212,16 @@ int serwis_ipc_init() {
     if (shm_created) {
         shm_reset_all();
     } else {
-        int r;
-        while ((r = sem_lock()) == -2) {}
-        if (r == 0) {
-            if (shm->pozar) shm->pozar = 0;
-            while ((r = sem_unlock()) == -2) {}
+        if (shm->pozar) {
+            semun u{}; u.val = 1;
+            if (semctl(sem_id, 0, SETVAL, u) == -1) perror("[IPC] semctl SETVAL");
+            shm_reset_all();
+        } else {
+            int r;
+            while ((r = sem_lock()) == -2) {}
+            if (r == 0) {
+                while ((r = sem_unlock()) == -2) {}
+            }
         }
     }
 
@@ -452,7 +457,12 @@ void serwis_set_pozar(int v) {
     while ((r = sem_lock()) == -2) {}
     if (r != 0) return;
 
-    shm->pozar = v ? 1 : 0;
+    if (v) {
+        shm_reset_all();
+        shm->pozar = 1;
+    } else {
+        shm->pozar = 0;
+    }
 
     while ((r = sem_unlock()) == -2) {}
     (void)r;
