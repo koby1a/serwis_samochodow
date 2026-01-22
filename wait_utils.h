@@ -10,6 +10,6 @@ static inline void serwis_wait_us(long long us) {
     tv.tv_sec = (time_t)(us / 1000000LL);
     tv.tv_usec = (suseconds_t)(us % 1000000LL);
     while (select(0, nullptr, nullptr, nullptr, &tv) == -1 && errno == EINTR) {
-        // Retry if interrupted by a signal.
+
     }
 }

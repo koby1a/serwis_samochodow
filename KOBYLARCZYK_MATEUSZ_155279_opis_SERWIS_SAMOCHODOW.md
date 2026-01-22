@@ -262,12 +262,12 @@ Przykładowy podział logów:
 
 Na podstawie tych logów będzie można zweryfikować poprawność działania oraz przeprowadzenie testów T1–T5.
 
-## 9. Linki do kodu (do uzupełnienia po implementacji)
+## 9. Linki do kodu
 
-Po zakończeniu implementacji w raporcie zostaną dodane linki do fragmentów kodu w repozytorium GitHub, obrazujących użycie wymaganych konstrukcji:
+Linki do fragmentów kodu w repozytorium GitHub, obrazujących użycie wymaganych konstrukcji:
 
-- tworzenie procesów (`fork()`, `exec()`, `wait()`, `exit()`),
-- mechanizmy synchronizacji (semafory/mutexy/zmienne warunkowe),
-- komunikacja międzyprocesowa (kolejki komunikatów, pamięć dzielona, potoki/gniazda),
-- obsługa sygnałów (`sigaction()` / `signal()`),
-- obsługa błędów (`perror()`, `errno`).
+- tworzenie procesów: `fork()` ([main.cpp#L21](https://github.com/koby1a/serwis_samochodow/blob/master/main.cpp#L21)), `execv()` ([main.cpp#L27](https://github.com/koby1a/serwis_samochodow/blob/master/main.cpp#L27)), `waitpid()` ([main.cpp#L155](https://github.com/koby1a/serwis_samochodow/blob/master/main.cpp#L155)), `exit()` ([tests/test_model.cpp#L5](https://github.com/koby1a/serwis_samochodow/blob/master/tests/test_model.cpp#L5)),
+- mechanizmy synchronizacji (semafory System V): `semget()` ([serwis_ipc.cpp#L199](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L199)), `semop()` ([serwis_ipc.cpp#L84](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L84)), `semctl()` ([serwis_ipc.cpp#L209](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L209)),
+- komunikacja międzyprocesowa: `msgget()` ([serwis_ipc.cpp#L162](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L162)), `msgsnd()` ([serwis_ipc.cpp#L255](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L255)), `msgrcv()` ([serwis_ipc.cpp#L265](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L265)), `shmget()` ([serwis_ipc.cpp#L178](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L178)), `shmat()` ([serwis_ipc.cpp#L194](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L194)), `shmdt()` ([serwis_ipc.cpp#L234](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L234)), `shmctl()` ([serwis_ipc.cpp#L184](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L184)),
+- obsługa sygnałów: `sigaction()` ([main.cpp#L99](https://github.com/koby1a/serwis_samochodow/blob/master/main.cpp#L99)), `sigaction()` mechanik ([mechanik.cpp#L23](https://github.com/koby1a/serwis_samochodow/blob/master/mechanik.cpp#L23)),
+- obsługa błędów: `perror()` ([serwis_ipc.cpp#L71](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L71)), `errno` ([serwis_ipc.cpp#L85](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L85)).
