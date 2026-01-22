@@ -5,65 +5,37 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-if (MSVC)
-    add_compile_options(/W4)
-else()
-    add_compile_options(-Wall -Wextra -Wpedantic)
-endif()
+add_compile_options(-Wall -Wextra -Wpedantic)
 
-# ------------------ Wspolna biblioteka (model + IPC + status stanowisk) ------------------
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 add_library(serwis_core
-        model.cpp
-        serwis_ipc.cpp
-        stanowiska_status.cpp
-        logger.cpp
+        src/model.cpp
+        src/ipc.cpp
+        src/logger.cpp
+        src/ui.cpp
 )
 
-target_include_directories(serwis_core PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}
-)
-
-# ------------------ Program glowny ------------------
-add_executable(serwis_samochodow
-        main.cpp
-)
+add_executable(serwis_samochodow apps/serwis_samochodow.cpp)
 target_link_libraries(serwis_samochodow PRIVATE serwis_core)
 
-# ------------------ Procesy ------------------
-add_executable(kierowca
-        kierowca.cpp
-)
+add_executable(kierowca apps/kierowca.cpp)
 target_link_libraries(kierowca PRIVATE serwis_core)
 
-add_executable(pracownik_serwisu
-        pracownik_serwisu.cpp
-)
+add_executable(pracownik_serwisu apps/pracownik_serwisu.cpp)
 target_link_libraries(pracownik_serwisu PRIVATE serwis_core)
 
-add_executable(mechanik
-        mechanik.cpp
-)
+add_executable(mechanik apps/mechanik.cpp)
 target_link_libraries(mechanik PRIVATE serwis_core)
 
-add_executable(kasjer
-        kasjer.cpp
-)
+add_executable(kasjer apps/kasjer.cpp)
 target_link_libraries(kasjer PRIVATE serwis_core)
 
-add_executable(kierownik
-        kierownik.cpp
-        stanowiska_status.cpp
-)
-target_include_directories(kierownik PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}
-)
+add_executable(kierownik apps/kierownik.cpp)
+target_link_libraries(kierownik PRIVATE serwis_core)
 
-# ------------------ Testy jednostkowe ------------------
-add_executable(test_model
-        tests/test_model.cpp
-        model.cpp
-)
+add_executable(dashboard apps/dashboard.cpp)
+target_link_libraries(dashboard PRIVATE serwis_core)
 
-target_include_directories(test_model PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}
-)
+add_executable(test_model tests/test_model.cpp)
+target_link_libraries(test_model PRIVATE serwis_core)

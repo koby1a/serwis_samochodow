@@ -1,126 +1,109 @@
-// model.h
 #pragma once
 
-// Tryb pracy stanowiska (normalny / przyspieszony o 50%)
+struct Samochod {
+    char marka;
+    int czas_przyjazdu;
+    int czas_naprawy;
+    int krytyczna;
+};
+
 enum SerwisTrybPracy {
     SERWIS_TRYB_NORMALNY = 0,
     SERWIS_TRYB_PRZYSPIESZONY = 1
 };
 
-struct Samochod {
-    char marka;          // 'A'..'Z'
-    int czas_przyjazdu;  // chwila przyjazdu (w jednostkach symulacji)
-    int czas_naprawy;    // szacowany czas naprawy
-    int krytyczna;       // 0/1 - czy usterka krytyczna
-};
-
-struct Stanowisko {
-    int id;              // 1..8
-    int czy_tylko_UY;    // 1 dla stanowiska 8 (tylko U/Y), 0 dla 1–7
-    int zajete;          // 0 - wolne, 1 - zajete
-    Samochod aktualny;   // aktualnie obslugiwany samochod
-};
-
-// Struktura opisujaca pojedyncza usluge serwisowa
 struct UslugaSerwisowa {
     int id;
     const char* nazwa;
-    int cena;        // cena w zl
-    int czas;        // czas w minutach
+    int cena;
+    int czas;
 };
 
-// Zwraca wskaznik na cennik
-const UslugaSerwisowa* serwis_pobierz_cennik(int* liczba_uslug);
-
-// Oblicza koszt na podstawie listy id uslug
-int serwis_oblicz_koszt(const int* lista_uslug, int liczba_uslug);
-
-
-// Zwraca 1, jesli marka jest obslugiwana (A, E, I, O, U, Y), w przeciwnym razie 0.
-int serwis_czy_marka_obslugiwana(char marka);
-
-// Zwraca indeks stanowiska (0..liczba_stanowisk-1), ktore moze przyjac samochod,
-// lub -1, jesli zadne wolne stanowisko nie moze go obsluzyc.
-int serwis_wybierz_stanowisko(const Samochod& s,
-                              Stanowisko* stanowiska,
-                              int liczba_stanowisk);
-
-// Oblicza czas naprawy z uwzglednieniem dodatkowych usterek oraz trybu pracy.
-//  - czas_podstawowy >= 0
-//  - czas_dodatkowy >= 0 (0 gdy brak rozszerzenia zakresu)
-//  - tryb: normalny lub przyspieszony (czas o 50% krotszy - zaokraglenie w gore)
-int serwis_oblicz_czas_naprawy(int czas_podstawowy,
-                               int czas_dodatkowy,
-                               SerwisTrybPracy tryb);
-
-// Symuluje decyzje klienta o akceptacji warunkow naprawy
-// losowa_wartosc: liczba z zakresu 0..99
-// prog_odrzucenia: np. 2 oznacza 2% odrzucen
-int serwis_klient_akceptuje(int losowa_wartosc, int prog_odrzucenia);
-
-// Symuluje decyzje klienta o rozszerzeniu zakresu naprawy
-// losowa_wartosc: liczba z zakresu 0..99
-// prog_odmowy: np. 20 oznacza 20% odmow
-int serwis_klient_zgadza_sie_na_rozszerzenie(int losowa_wartosc, int prog_odmowy);
-
-// Symuluje decyzje klienta o akceptacji warunkow naprawy
-// losowa_wartosc: 0..99
-// prog_odrzucenia: np. 2 oznacza 2% odrzucen
-int serwis_klient_akceptuje_warunki(int losowa_wartosc, int prog_odrzucenia);
-
-// Oblicza laczny czas naprawy na podstawie listy uslug
-// lista_uslug  - tablica ID uslug
-// liczba_uslug - ile uslug
-// czas_dodatkowy - np. za rozszerzenie naprawy
-// tryb - normalny lub przyspieszony
-int serwis_oblicz_czas_z_uslug(const int* lista_uslug,
-                               int liczba_uslug,
-                               int czas_dodatkowy,
-                               SerwisTrybPracy tryb);
-
-// Zwraca wskaznik na usluge o danym ID albo nullptr, jesli brak
-const UslugaSerwisowa* serwis_znajdz_usluge(int id);
-
-// Zwraca wskaznik na usluge o danym ID albo nullptr, jesli brak
-const UslugaSerwisowa* serwis_znajdz_usluge(int id);
-
-// Prosty deterministyczny generator (LCG) - zwraca liczbe 0..UINT_MAX
-unsigned int serwis_losuj_u32(unsigned int* seed);
-
-// Losuje liczbe calkowita z przedzialu [min_wartosc, max_wartosc]
-int serwis_losuj_int(unsigned int* seed, int min_wartosc, int max_wartosc);
-
-
-// Losuje liste uslug (ID) bez duplikatow.
-// out_uslugi: tablica na ID uslug
-// max_out: pojemnosc tablicy
-// seed: wskaznik na seed generatora
-// min_liczba_uslug / max_liczba_uslug: zakres liczby wylosowanych uslug
-// Zwraca liczbe wylosowanych uslug (0 w razie bledu).
-int serwis_losuj_liste_uslug(int* out_uslugi,
-                             int max_out,
-                             unsigned int* seed,
-                             int min_liczba_uslug,
-                             int max_liczba_uslug);
-
-
-// Prosta struktura oferty naprawy dla klienta
 struct OfertaNaprawy {
     int liczba_uslug;
-    int uslugi_id[10];   // max 10 uslug w ofercie
+    int uslugi[8];
     int koszt;
-    int czas;            // w minutach
+    int czas;
 };
 
-// Tworzy oferte naprawy:
-// - losuje liste uslug (bez duplikatow)
-// - liczy koszt i czas
-// Zwraca 1 gdy OK, 0 gdy blad.
-int serwis_utworz_oferte(OfertaNaprawy* out_oferta,
-                         unsigned int* seed,
-                         int min_liczba_uslug,
-                         int max_liczba_uslug,
-                         int czas_dodatkowy,
-                         SerwisTrybPracy tryb);
+/**
+ * @brief Losuje liczbe calkowita z przedzialu [a,b].
+ * @param seed Wskaznik na seed.
+ * @param a Dolna granica.
+ * @param b Gorna granica.
+ * @return Wylosowana wartosc.
+ */
+int serwis_losuj_int(unsigned int* seed, int a, int b);
 
+/**
+ * @brief Sprawdza czy marka jest obslugiwana (A,E,I,O,U,Y).
+ */
+int serwis_czy_marka_obslugiwana(char marka);
 
+/**
+ * @brief Sprawdza czy dane stanowisko moze obsluzyc marke.
+ * @param stanowisko_id 1..8
+ * @param marka Marka.
+ * @return 1 gdy moze, inaczej 0.
+ */
+int serwis_stanowisko_moze_obsluzyc(int stanowisko_id, char marka);
+
+/**
+ * @brief Sprawdza czy czas t jest w godzinach [Tp,Tk).
+ */
+int serwis_czy_w_godzinach(int Tp, int Tk, int t);
+
+/**
+ * @brief Oblicza ile minut do nastepnego otwarcia.
+ */
+int serwis_minuty_do_otwarcia(int Tp, int Tk, int t);
+
+/**
+ * @brief Sprawdza czy klient moze czekac poza godzinami.
+ */
+int serwis_czy_moze_czekac_poza_godzinami(int Tp, int Tk, int T1, const Samochod& s);
+
+/**
+ * @brief Aktualizuje liczbe okienek rejestracji wg K1/K2 i dlugosci kolejki.
+ */
+int serwis_aktualizuj_okienka(int aktywne_okienka, int dl_kolejki, int K1, int K2);
+
+/**
+ * @brief Zwraca wskaznik na cennik oraz liczbe pozycji.
+ */
+const UslugaSerwisowa* serwis_pobierz_cennik(int* liczba_uslug);
+
+/**
+ * @brief Szuka uslugi po id w cenniku.
+ */
+const UslugaSerwisowa* serwis_znajdz_usluge(int id);
+
+/**
+ * @brief Liczy koszt na podstawie listy id uslug.
+ */
+int serwis_oblicz_koszt(const int* lista_uslug, int liczba_uslug);
+
+/**
+ * @brief Liczy czas naprawy z listy uslug + czas dodatkowy, z uwzglednieniem trybu.
+ */
+int serwis_oblicz_czas_z_uslug(const int* lista_uslug, int liczba_uslug, int czas_dodatkowy, SerwisTrybPracy tryb);
+
+/**
+ * @brief Liczy czas naprawy: czas_podstawowy + czas_dodatkowy, z uwzglednieniem trybu.
+ */
+int serwis_oblicz_czas_naprawy(int czas_podstawowy, int czas_dodatkowy, SerwisTrybPracy tryb);
+
+/**
+ * @brief Czy klient akceptuje warunki (prog_odrzucenia w %).
+ */
+int serwis_klient_akceptuje_warunki(int losowa_wartosc, int prog_odrzucenia);
+
+/**
+ * @brief Czy klient zgadza sie na rozszerzenie (prog_odmowy w %).
+ */
+int serwis_klient_zgadza_sie_na_rozszerzenie(int losowa_wartosc, int prog_odmowy);
+
+/**
+ * @brief Tworzy oferte: losuje uslugi, liczy koszt i czas.
+ */
+int serwis_utworz_oferte(OfertaNaprawy* out, unsigned int* seed, int min_uslug, int max_uslug, int czas_dodatkowy, SerwisTrybPracy tryb);

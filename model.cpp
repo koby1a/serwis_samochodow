@@ -1,6 +1,64 @@
-// model.cpp
 #include "model.h"
-#include <climits>  // INT_MAX
+#include <climits>
+
+/** @brief Normalizuje litere marki do wielkiej. */
+static char norm_marka(char m) {
+    if (m >= 'a' && m <= 'z') return (char)(m - 'a' + 'A');
+    return m;
+}
+
+int serwis_losuj_int(unsigned int* seed, int a, int b) {
+    if (!seed) return a;
+    if (a > b) { int t = a; a = b; b = t; }
+    *seed = (*seed * 1103515245u + 12345u);
+    unsigned int r = (*seed / 65536u) % 32768u;
+    int span = (b - a + 1);
+    return a + (int)(r % (unsigned int)span);
+}
+
+int serwis_czy_marka_obslugiwana(char marka) {
+    marka = norm_marka(marka);
+    return (marka=='A'||marka=='E'||marka=='I'||marka=='O'||marka=='U'||marka=='Y') ? 1 : 0;
+}
+
+int serwis_stanowisko_moze_obsluzyc(int stanowisko_id, char marka) {
+    marka = norm_marka(marka);
+    if (!serwis_czy_marka_obslugiwana(marka)) return 0;
+    if (stanowisko_id == 8) return (marka=='U' || marka=='Y') ? 1 : 0;
+    return (stanowisko_id >= 1 && stanowisko_id <= 7) ? 1 : 0;
+}
+
+int serwis_czy_w_godzinach(int Tp, int Tk, int t) {
+    return (t >= Tp && t < Tk) ? 1 : 0;
+}
+
+int serwis_minuty_do_otwarcia(int Tp, int Tk, int t) {
+    if (t < Tp) return Tp - t;
+    if (t >= Tk) return (1440 - t) + Tp;
+    return 0;
+}
+
+int serwis_czy_moze_czekac_poza_godzinami(int Tp, int Tk, int T1, const Samochod& s) {
+    if (serwis_czy_w_godzinach(Tp, Tk, s.czas_przyjazdu)) return 1;
+    if (s.krytyczna) return 1;
+    int do_otwarcia = serwis_minuty_do_otwarcia(Tp, Tk, s.czas_przyjazdu);
+    return (do_otwarcia < T1) ? 1 : 0;
+}
+
+int serwis_aktualizuj_okienka(int aktywne_okienka, int dl_kolejki, int K1, int K2) {
+    if (aktywne_okienka < 1) aktywne_okienka = 1;
+    if (aktywne_okienka > 3) aktywne_okienka = 3;
+
+    if (dl_kolejki > K2) aktywne_okienka = 3;
+    else if (dl_kolejki > K1 && aktywne_okienka < 2) aktywne_okienka = 2;
+
+    if (aktywne_okienka >= 2 && dl_kolejki <= 2) aktywne_okienka = 1;
+    if (aktywne_okienka == 3 && dl_kolejki <= 3) {
+        aktywne_okienka = 2;
+        if (dl_kolejki <= 2) aktywne_okienka = 1;
+    }
+    return aktywne_okienka;
+}
 
 static const UslugaSerwisowa CENNIK[] = {
     {1, "wymiana_oleju", 150, 30},
@@ -36,347 +94,82 @@ static const UslugaSerwisowa CENNIK[] = {
 };
 
 const UslugaSerwisowa* serwis_pobierz_cennik(int* liczba_uslug) {
-    if (liczba_uslug) {
-        *liczba_uslug = sizeof(CENNIK) / sizeof(CENNIK[0]);
-    }
+    if (liczba_uslug) *liczba_uslug = (int)(sizeof(CENNIK)/sizeof(CENNIK[0]));
     return CENNIK;
 }
 
 const UslugaSerwisowa* serwis_znajdz_usluge(int id) {
-    int liczba_cennika = 0;
-    const UslugaSerwisowa* cennik = serwis_pobierz_cennik(&liczba_cennika);
-
-    if (!cennik || liczba_cennika <= 0) {
-        return nullptr;
-    }
-
-    for (int i = 0; i < liczba_cennika; ++i) {
-        if (cennik[i].id == id) {
-            return &cennik[i];
-        }
-    }
-
+    int n = 0;
+    const UslugaSerwisowa* c = serwis_pobierz_cennik(&n);
+    for (int i = 0; i < n; ++i) if (c[i].id == id) return &c[i];
     return nullptr;
 }
 
-
 int serwis_oblicz_koszt(const int* lista_uslug, int liczba_uslug) {
-    if (!lista_uslug || liczba_uslug <= 0) {
-        return 0;
-    }
-
-    int suma = 0;
-
+    if (!lista_uslug || liczba_uslug <= 0) return 0;
+    long long suma = 0;
     for (int i = 0; i < liczba_uslug; ++i) {
         const UslugaSerwisowa* u = serwis_znajdz_usluge(lista_uslug[i]);
-        if (u) {
-            suma += u->cena;
-        }
+        if (u) suma += u->cena;
     }
-
-    return suma;
+    if (suma < 0) suma = 0;
+    if (suma > INT_MAX) suma = INT_MAX;
+    return (int)suma;
 }
 
-
-int serwis_czy_marka_obslugiwana(char marka) {
-    // Zamiana malych liter na wielkie, zeby 'a' i 'A' byly traktowane tak samo
-    if (marka >= 'a' && marka <= 'z') {
-        marka = static_cast<char>(marka - 'a' + 'A');
-    }
-
-    switch (marka) {
-        case 'A':
-        case 'E':
-        case 'I':
-        case 'O':
-        case 'U':
-        case 'Y':
-            return 1; // marka obslugiwana
-        default:
-            return 0; // marka nieobslugiwana
-    }
-}
-
-int serwis_wybierz_stanowisko(const Samochod& s,
-                              Stanowisko* stanowiska,
-                              int liczba_stanowisk) {
-    // Ujednolicenie marki do wielkich liter
-    char marka = s.marka;
-    if (marka >= 'a' && marka <= 'z') {
-        marka = static_cast<char>(marka - 'a' + 'A');
-    }
-
-    // Jezeli marka w ogole nie jest obslugiwana, nie ma sensu szukac stanowiska
-    if (!serwis_czy_marka_obslugiwana(marka)) {
-        return -1;
-    }
-
-    // Szukamy pierwszego wolnego stanowiska, ktore moze obsluzyc dana marke
-    for (int i = 0; i < liczba_stanowisk; ++i) {
-        Stanowisko& st = stanowiska[i];
-
-        if (st.zajete) {
-            // stanowisko zajete -> szukamy dalej
-            continue;
-        }
-
-        if (st.czy_tylko_UY) {
-            // To stanowisko (np. 8) obsluguje tylko U i Y
-            if (marka == 'U' || marka == 'Y') {
-                return i; // indeks stanowiska w tablicy
-            } else {
-                continue; // to stanowisko nie obsluzy tej marki
-            }
-        } else {
-            // Normalne stanowisko (1–7) - skoro marka jest obslugiwana, to OK
-            return i;
-        }
-    }
-
-    // Nie znaleziono wolnego, pasujacego stanowiska
-    return -1;
-}
-
-int serwis_oblicz_czas_naprawy(int czas_podstawowy,
-                               int czas_dodatkowy,
-                               SerwisTrybPracy tryb) {
-    // Pilnujemy, aby nie bylo ujemnych czasow
+int serwis_oblicz_czas_naprawy(int czas_podstawowy, int czas_dodatkowy, SerwisTrybPracy tryb) {
     if (czas_podstawowy < 0) czas_podstawowy = 0;
     if (czas_dodatkowy < 0) czas_dodatkowy = 0;
-
-    long long suma = static_cast<long long>(czas_podstawowy) +
-                     static_cast<long long>(czas_dodatkowy);
-
-    // Tryb przyspieszony: czas krotszy o 50% (dzielimy przez 2, zaokraglenie w gore)
-    if (tryb == SERWIS_TRYB_PRZYSPIESZONY) {
-        suma = (suma + 1) / 2; // np. 5 -> 3, 16 -> 8
-    }
-
-    if (suma < 0) {
-        suma = 0;
-    } else if (suma > INT_MAX) {
-        suma = INT_MAX;
-    }
-
-    return static_cast<int>(suma);
-}
-int serwis_klient_akceptuje(int losowa_wartosc, int prog_odrzucenia) {
-    // Walidacja danych wejsciowych
-    if (losowa_wartosc < 0 || losowa_wartosc > 99) {
-        return 0;
-    }
-
-    if (prog_odrzucenia < 0 || prog_odrzucenia > 100) {
-        return 0;
-    }
-
-    // Jesli losowa wartosc miesci sie w progu odrzucenia,
-    // klient NIE akceptuje warunkow
-    if (losowa_wartosc < prog_odrzucenia) {
-        return 0;
-    }
-
-    // W przeciwnym wypadku klient akceptuje
-    return 1;
+    long long suma = (long long)czas_podstawowy + (long long)czas_dodatkowy;
+    if (tryb == SERWIS_TRYB_PRZYSPIESZONY) suma = (suma + 1) / 2;
+    if (suma < 0) suma = 0;
+    if (suma > INT_MAX) suma = INT_MAX;
+    return (int)suma;
 }
 
-int serwis_klient_zgadza_sie_na_rozszerzenie(int losowa_wartosc, int prog_odmowy) {
-    // Walidacja danych wejsciowych
-    if (losowa_wartosc < 0 || losowa_wartosc > 99) {
-        return 0;
+int serwis_oblicz_czas_z_uslug(const int* lista_uslug, int liczba_uslug, int czas_dodatkowy, SerwisTrybPracy tryb) {
+    if (!lista_uslug || liczba_uslug <= 0) return 0;
+    long long suma = 0;
+    for (int i = 0; i < liczba_uslug; ++i) {
+        const UslugaSerwisowa* u = serwis_znajdz_usluge(lista_uslug[i]);
+        if (u) suma += u->czas;
     }
-
-    if (prog_odmowy < 0 || prog_odmowy > 100) {
-        return 0;
-    }
-
-    // Jesli losowa wartosc miesci sie w progu odmowy,
-    // klient NIE zgadza sie na rozszerzenie
-    if (losowa_wartosc < prog_odmowy) {
-        return 0;
-    }
-
-    // W przeciwnym wypadku klient zgadza sie na rozszerzenie
-    return 1;
+    if (czas_dodatkowy < 0) czas_dodatkowy = 0;
+    suma += czas_dodatkowy;
+    if (tryb == SERWIS_TRYB_PRZYSPIESZONY) suma = (suma + 1) / 2;
+    if (suma < 0) suma = 0;
+    if (suma > INT_MAX) suma = INT_MAX;
+    return (int)suma;
 }
 
 int serwis_klient_akceptuje_warunki(int losowa_wartosc, int prog_odrzucenia) {
-    // Sprawdzenie poprawnosci danych
-    if (losowa_wartosc < 0 || losowa_wartosc > 99) {
-        return 0;
-    }
+    if (losowa_wartosc < 0 || losowa_wartosc > 99) return 0;
+    if (prog_odrzucenia < 0 || prog_odrzucenia > 100) return 0;
+    return (losowa_wartosc < prog_odrzucenia) ? 0 : 1;
+}
 
-    if (prog_odrzucenia < 0 || prog_odrzucenia > 100) {
-        return 0;
-    }
+int serwis_klient_zgadza_sie_na_rozszerzenie(int losowa_wartosc, int prog_odmowy) {
+    if (losowa_wartosc < 0 || losowa_wartosc > 99) return 0;
+    if (prog_odmowy < 0 || prog_odmowy > 100) return 0;
+    return (losowa_wartosc < prog_odmowy) ? 0 : 1;
+}
 
-    // Jesli losowa wartosc miesci sie w progu odrzucenia
-    // klient NIE akceptuje warunkow
-    if (losowa_wartosc < prog_odrzucenia) {
-        return 0;
-    }
+int serwis_utworz_oferte(OfertaNaprawy* out, unsigned int* seed, int min_uslug, int max_uslug, int czas_dodatkowy, SerwisTrybPracy tryb) {
+    if (!out || !seed) return 0;
+    if (min_uslug < 1) min_uslug = 1;
+    if (max_uslug > 8) max_uslug = 8;
+    if (min_uslug > max_uslug) { int t = min_uslug; min_uslug = max_uslug; max_uslug = t; }
 
-    // W przeciwnym wypadku klient akceptuje warunki
+    int liczba = serwis_losuj_int(seed, min_uslug, max_uslug);
+    out->liczba_uslug = liczba;
+
+    int n = 0;
+    serwis_pobierz_cennik(&n);
+
+    for (int i = 0; i < liczba; ++i) out->uslugi[i] = serwis_losuj_int(seed, 1, n);
+    for (int i = liczba; i < 8; ++i) out->uslugi[i] = 0;
+
+    out->koszt = serwis_oblicz_koszt(out->uslugi, out->liczba_uslug);
+    out->czas  = serwis_oblicz_czas_z_uslug(out->uslugi, out->liczba_uslug, czas_dodatkowy, tryb);
     return 1;
 }
-
-int serwis_oblicz_czas_z_uslug(const int* lista_uslug,
-                               int liczba_uslug,
-                               int czas_dodatkowy,
-                               SerwisTrybPracy tryb) {
-    if (!lista_uslug || liczba_uslug <= 0) {
-        return 0;
-    }
-
-    int suma_czasu = 0;
-
-    // Sumujemy czasy z cennika
-    for (int i = 0; i < liczba_uslug; ++i) {
-        const UslugaSerwisowa* u = serwis_znajdz_usluge(lista_uslug[i]);
-        if (u) {
-            suma_czasu += u->czas;
-        }
-    }
-
-    // Dodajemy czas dodatkowy (np. rozszerzenie zakresu)
-    suma_czasu += czas_dodatkowy;
-
-    // Uwzgledniamy tryb pracy mechanika
-    if (tryb == SERWIS_TRYB_PRZYSPIESZONY) {
-        // Przyspieszenie o 50% -> czas dzielimy przez 2
-        suma_czasu = (suma_czasu + 1) / 2;
-    }
-
-    return suma_czasu;
-}
-
-
-unsigned int serwis_losuj_u32(unsigned int* seed) {
-    // Prosty LCG: powtarzalny na kazdej platformie (w przeciwienstwie do rand())
-    // Parametry jak w wielu klasycznych implementacjach
-    if (!seed) {
-        return 0u;
-    }
-    *seed = (*seed * 1664525u) + 1013904223u;
-    return *seed;
-}
-
-int serwis_losuj_int(unsigned int* seed, int min_wartosc, int max_wartosc) {
-    if (!seed) {
-        return min_wartosc;
-    }
-    if (min_wartosc > max_wartosc) {
-        int tmp = min_wartosc;
-        min_wartosc = max_wartosc;
-        max_wartosc = tmp;
-    }
-
-    unsigned int r = serwis_losuj_u32(seed);
-    int zakres = (max_wartosc - min_wartosc + 1);
-    if (zakres <= 0) {
-        return min_wartosc;
-    }
-
-    int wynik = min_wartosc + static_cast<int>(r % static_cast<unsigned int>(zakres));
-    return wynik;
-}
-
-int serwis_losuj_liste_uslug(int* out_uslugi,
-                             int max_out,
-                             unsigned int* seed,
-                             int min_liczba_uslug,
-                             int max_liczba_uslug) {
-    if (!out_uslugi || max_out <= 0 || !seed) {
-        return 0;
-    }
-
-    if (min_liczba_uslug < 0) min_liczba_uslug = 0;
-    if (max_liczba_uslug < 0) max_liczba_uslug = 0;
-    if (min_liczba_uslug > max_liczba_uslug) {
-        int tmp = min_liczba_uslug;
-        min_liczba_uslug = max_liczba_uslug;
-        max_liczba_uslug = tmp;
-    }
-
-    // Ile mamy uslug w cenniku?
-    int liczba_cennika = 0;
-    (void)serwis_pobierz_cennik(&liczba_cennika);
-    if (liczba_cennika <= 0) {
-        return 0;
-    }
-
-    // Ograniczamy maksymalna liczbe losowanych uslug
-    if (max_liczba_uslug > liczba_cennika) max_liczba_uslug = liczba_cennika;
-    if (max_liczba_uslug > max_out) max_liczba_uslug = max_out;
-    if (min_liczba_uslug > max_liczba_uslug) min_liczba_uslug = max_liczba_uslug;
-
-    int ile = serwis_losuj_int(seed, min_liczba_uslug, max_liczba_uslug);
-
-    // Losujemy ID z zakresu 1..liczba_cennika bez duplikatow
-    int zapisane = 0;
-    while (zapisane < ile) {
-        int id = serwis_losuj_int(seed, 1, liczba_cennika);
-
-        // sprawdzamy duplikaty
-        int duplikat = 0;
-        for (int i = 0; i < zapisane; ++i) {
-            if (out_uslugi[i] == id) {
-                duplikat = 1;
-                break;
-            }
-        }
-        if (duplikat) {
-            continue;
-        }
-
-        out_uslugi[zapisane] = id;
-        zapisane++;
-    }
-
-    return zapisane;
-}
-
-
-int serwis_utworz_oferte(OfertaNaprawy* out_oferta,
-                         unsigned int* seed,
-                         int min_liczba_uslug,
-                         int max_liczba_uslug,
-                         int czas_dodatkowy,
-                         SerwisTrybPracy tryb) {
-    if (!out_oferta || !seed) {
-        return 0;
-    }
-
-    // Zerowanie
-    out_oferta->liczba_uslug = 0;
-    out_oferta->koszt = 0;
-    out_oferta->czas = 0;
-    for (int i = 0; i < 10; ++i) {
-        out_oferta->uslugi_id[i] = 0;
-    }
-
-    // Losujemy liste uslug (max 10)
-    int n = serwis_losuj_liste_uslug(out_oferta->uslugi_id,
-                                    10,
-                                    seed,
-                                    min_liczba_uslug,
-                                    max_liczba_uslug);
-    if (n <= 0) {
-        return 0;
-    }
-
-    out_oferta->liczba_uslug = n;
-
-    // Liczymy koszt i czas na bazie wylosowanych uslug
-    out_oferta->koszt = serwis_oblicz_koszt(out_oferta->uslugi_id, n);
-    out_oferta->czas = serwis_oblicz_czas_z_uslug(out_oferta->uslugi_id,
-                                                  n,
-                                                  czas_dodatkowy,
-                                                  tryb);
-
-    return 1;
-}
-
-
-
-

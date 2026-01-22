@@ -1,301 +1,190 @@
-// serwis_ipc.cpp
 #include "serwis_ipc.h"
-#include "komunikaty.h"
-#include <iostream>
-
-#if defined(__unix__) || defined(__APPLE__)
-
+#include <cstdio>
 #include <sys/ipc.h>
 #include <sys/msg.h>
 #include <sys/shm.h>
 #include <sys/sem.h>
 #include <unistd.h>
-#include <cerrno>
-#include <cstdio>
-#include <cstring>
 
-// Minimalne prawa dostepu
-static const int SERWIS_PERM = 0600;
+static const int PERM = 0600;
 
-// 3 kolejki: zgloszenia / zlecenia / raporty
-static int g_q_zgl = -1;
-static int g_q_zlec = -1;
-static int g_q_rap = -1;
+static int q_zgl = -1;
+static int q_zlec = -1;
+static int q_rap = -1;
 
-// SHM + SEM dla statystyk
-static int g_shm_id = -1;
-static int g_sem_id = -1;
-static SerwisStatystyki* g_stats = nullptr;
+static int shm_id = -1;
+static int sem_id = -1;
+static SerwisStatystyki* shm = nullptr;
 
-static key_t serwis_key(const char* path, int proj_id) {
-    key_t k = ftok(path, proj_id);
-    if (k == -1) {
-        perror("[IPC] ftok");
-    }
-    return k;
+union semun { int val; struct semid_ds* buf; unsigned short* array; };
+
+/** @brief ftok helper. */
+static key_t k(const char* path, int id) {
+    key_t kk = ftok(path, id);
+    if (kk == -1) perror("[IPC] ftok");
+    return kk;
 }
 
-// semun nie jest standardowo zdefiniowany na kazdym systemie
-union semun {
-    int val;
-    struct semid_ds* buf;
-    unsigned short* array;
-};
-
+/** @brief Lock semafora. */
 static int sem_lock() {
-    if (g_sem_id < 0) return -1;
     struct sembuf op{};
-    op.sem_num = 0;
-    op.sem_op = -1;
-    op.sem_flg = 0;
-    if (semop(g_sem_id, &op, 1) == -1) {
-        perror("[IPC] semop lock");
-        return -1;
-    }
+    op.sem_num = 0; op.sem_op = -1; op.sem_flg = 0;
+    if (semop(sem_id, &op, 1) == -1) { perror("[IPC] semop lock"); return -1; }
     return 0;
 }
 
+/** @brief Unlock semafora. */
 static int sem_unlock() {
-    if (g_sem_id < 0) return -1;
     struct sembuf op{};
-    op.sem_num = 0;
-    op.sem_op = +1;
-    op.sem_flg = 0;
-    if (semop(g_sem_id, &op, 1) == -1) {
-        perror("[IPC] semop unlock");
-        return -1;
-    }
+    op.sem_num = 0; op.sem_op = +1; op.sem_flg = 0;
+    if (semop(sem_id, &op, 1) == -1) { perror("[IPC] semop unlock"); return -1; }
     return 0;
 }
 
-static void stat_inc(int* field) {
-    if (!g_stats || !field) return;
-    if (sem_lock() == 0) {
-        (*field)++;
-        sem_unlock();
-    }
-}
+struct MsgZgl { long mtype; Samochod s; };
+struct MsgZlec { long mtype; Zlecenie z; };
+struct MsgRap { long mtype; Raport r; };
 
 int serwis_ipc_init() {
-    // Uzywamy pliku biezacego katalogu jako “seed” do ftok:
-    // W realu mozna dac np. "./" i roznicowac proj_id.
-    key_t k_zgl = serwis_key(".", 65);
-    key_t k_zlec = serwis_key(".", 66);
-    key_t k_rap = serwis_key(".", 67);
-    key_t k_shm = serwis_key(".", 68);
-    key_t k_sem = serwis_key(".", 69);
+    key_t kz  = k(".", 65);
+    key_t kzl = k(".", 66);
+    key_t kr  = k(".", 67);
+    key_t ksh = k(".", 68);
+    key_t kse = k(".", 69);
+    if (kz==-1||kzl==-1||kr==-1||ksh==-1||kse==-1) return SERWIS_IPC_ERR;
 
-    if (k_zgl == -1 || k_zlec == -1 || k_rap == -1 || k_shm == -1 || k_sem == -1) {
-        return SERWIS_IPC_ERR;
-    }
+    q_zgl = msgget(kz, IPC_CREAT | PERM);
+    if (q_zgl == -1) { perror("[IPC] msgget zgl"); return SERWIS_IPC_ERR; }
 
-    // Kolejki
-    g_q_zgl = msgget(k_zgl, IPC_CREAT | SERWIS_PERM);
-    if (g_q_zgl == -1) { perror("[IPC] msgget zgl"); return SERWIS_IPC_ERR; }
+    q_zlec = msgget(kzl, IPC_CREAT | PERM);
+    if (q_zlec == -1) { perror("[IPC] msgget zlec"); return SERWIS_IPC_ERR; }
 
-    g_q_zlec = msgget(k_zlec, IPC_CREAT | SERWIS_PERM);
-    if (g_q_zlec == -1) { perror("[IPC] msgget zlec"); return SERWIS_IPC_ERR; }
+    q_rap = msgget(kr, IPC_CREAT | PERM);
+    if (q_rap == -1) { perror("[IPC] msgget rap"); return SERWIS_IPC_ERR; }
 
-    g_q_rap = msgget(k_rap, IPC_CREAT | SERWIS_PERM);
-    if (g_q_rap == -1) { perror("[IPC] msgget rap"); return SERWIS_IPC_ERR; }
+    shm_id = shmget(ksh, sizeof(SerwisStatystyki), IPC_CREAT | PERM);
+    if (shm_id == -1) { perror("[IPC] shmget"); return SERWIS_IPC_ERR; }
 
-    // SHM
-    g_shm_id = shmget(k_shm, sizeof(SerwisStatystyki), IPC_CREAT | SERWIS_PERM);
-    if (g_shm_id == -1) { perror("[IPC] shmget"); return SERWIS_IPC_ERR; }
+    void* p = shmat(shm_id, nullptr, 0);
+    if (p == (void*)-1) { perror("[IPC] shmat"); return SERWIS_IPC_ERR; }
+    shm = (SerwisStatystyki*)p;
 
-    void* p = shmat(g_shm_id, nullptr, 0);
-    if (p == (void*)-1) { perror("[IPC] shmat"); g_stats = nullptr; return SERWIS_IPC_ERR; }
-    g_stats = static_cast<SerwisStatystyki*>(p);
+    sem_id = semget(kse, 1, IPC_CREAT | PERM);
+    if (sem_id == -1) { perror("[IPC] semget"); return SERWIS_IPC_ERR; }
 
-    // SEM (1 semafor binarny)
-    g_sem_id = semget(k_sem, 1, IPC_CREAT | SERWIS_PERM);
-    if (g_sem_id == -1) { perror("[IPC] semget"); return SERWIS_IPC_ERR; }
-
-    // Inicjalizacja semafora do 1 (tylko gdy nowy) - bezpieczne: ustawiamy zawsze
-    semun u{};
-    u.val = 1;
-    if (semctl(g_sem_id, 0, SETVAL, u) == -1) {
-        // Jesli ktos nie pozwala, to logujemy, ale nie przerywamy (bo moze byc juz ustawiony)
-        perror("[IPC] semctl SETVAL");
-    }
+    semun u{}; u.val = 1;
+    if (semctl(sem_id, 0, SETVAL, u) == -1) perror("[IPC] semctl SETVAL");
 
     return SERWIS_IPC_OK;
 }
 
-void serwis_ipc_cleanup() {
-    // Odpiecie od shm
-    if (g_stats) {
-        shmdt(reinterpret_cast<void*>(g_stats));
-        g_stats = nullptr;
-    }
+void serwis_ipc_detach() {
+    if (shm) { shmdt((void*)shm); shm = nullptr; }
 }
 
 void serwis_ipc_cleanup_all() {
-    // Uwaga: wywolywac tylko w orchestratorze, gdy juz dzieci nie zyja
-    if (g_q_zgl != -1) {
-        if (msgctl(g_q_zgl, IPC_RMID, nullptr) == -1) perror("[IPC] msgctl RMID zgl");
-    }
-    if (g_q_zlec != -1) {
-        if (msgctl(g_q_zlec, IPC_RMID, nullptr) == -1) perror("[IPC] msgctl RMID zlec");
-    }
-    if (g_q_rap != -1) {
-        if (msgctl(g_q_rap, IPC_RMID, nullptr) == -1) perror("[IPC] msgctl RMID rap");
-    }
-    if (g_shm_id != -1) {
-        if (shmctl(g_shm_id, IPC_RMID, nullptr) == -1) perror("[IPC] shmctl RMID");
-    }
-    if (g_sem_id != -1) {
-        if (semctl(g_sem_id, 0, IPC_RMID) == -1) perror("[IPC] semctl RMID");
-    }
+    if (q_zgl  != -1) if (msgctl(q_zgl,  IPC_RMID, nullptr) == -1) perror("[IPC] msgctl RMID zgl");
+    if (q_zlec != -1) if (msgctl(q_zlec, IPC_RMID, nullptr) == -1) perror("[IPC] msgctl RMID zlec");
+    if (q_rap  != -1) if (msgctl(q_rap,  IPC_RMID, nullptr) == -1) perror("[IPC] msgctl RMID rap");
+    if (shm_id != -1) if (shmctl(shm_id, IPC_RMID, nullptr) == -1) perror("[IPC] shmctl RMID");
+    if (sem_id != -1) if (semctl(sem_id, 0, IPC_RMID) == -1) perror("[IPC] semctl RMID");
 
-    g_q_zgl = g_q_zlec = g_q_rap = -1;
-    g_shm_id = g_sem_id = -1;
+    q_zgl = q_zlec = q_rap = -1;
+    shm_id = sem_id = -1;
 }
 
-int serwis_ipc_wyslij_zgloszenie(const Samochod& s) {
-    if (g_q_zgl == -1) return SERWIS_IPC_ERR;
-    MsgZgloszenie m{};
-    m.mtype = 1;
-    m.s = s;
-
-    if (msgsnd(g_q_zgl, &m, sizeof(MsgZgloszenie) - sizeof(long), 0) == -1) {
-        perror("[IPC] msgsnd zgl");
-        return SERWIS_IPC_ERR;
-    }
+int serwis_ipc_send_zgl(const Samochod& s) {
+    MsgZgl m{}; m.mtype = 1; m.s = s;
+    if (msgsnd(q_zgl, &m, sizeof(MsgZgl)-sizeof(long), 0) == -1) { perror("[IPC] msgsnd zgl"); return SERWIS_IPC_ERR; }
     return SERWIS_IPC_OK;
 }
 
-int serwis_ipc_odbierz_zgloszenie(Samochod& s) {
-    if (g_q_zgl == -1) return SERWIS_IPC_ERR;
-    MsgZgloszenie m{};
-    if (msgrcv(g_q_zgl, &m, sizeof(MsgZgloszenie) - sizeof(long), 1, 0) == -1) {
-        perror("[IPC] msgrcv zgl");
-        return SERWIS_IPC_ERR;
-    }
+int serwis_ipc_recv_zgl(Samochod& s) {
+    MsgZgl m{};
+    if (msgrcv(q_zgl, &m, sizeof(MsgZgl)-sizeof(long), 1, 0) == -1) { perror("[IPC] msgrcv zgl"); return SERWIS_IPC_ERR; }
     s = m.s;
     return SERWIS_IPC_OK;
 }
 
-int serwis_ipc_wyslij_zlecenie(const Samochod& s, int id_klienta, int stanowisko_id, const OfertaNaprawy& oferta) {
-    if (g_q_zlec == -1) return SERWIS_IPC_ERR;
-    MsgZlecenie m{};
-    m.mtype = 100 + stanowisko_id;
-    m.stanowisko_id = stanowisko_id;
-    m.id_klienta = id_klienta;
-    m.s = s;
-    m.oferta = oferta;
-
-    if (msgsnd(g_q_zlec, &m, sizeof(MsgZlecenie) - sizeof(long), 0) == -1) {
-        perror("[IPC] msgsnd zlec");
-        return SERWIS_IPC_ERR;
-    }
+int serwis_ipc_send_zlec(const Zlecenie& z) {
+    MsgZlec m{}; m.mtype = 100 + z.stanowisko_id; m.z = z;
+    if (msgsnd(q_zlec, &m, sizeof(MsgZlec)-sizeof(long), 0) == -1) { perror("[IPC] msgsnd zlec"); return SERWIS_IPC_ERR; }
     return SERWIS_IPC_OK;
 }
 
-int serwis_ipc_odbierz_zlecenie(int stanowisko_id, Samochod& s, int& id_klienta, OfertaNaprawy& oferta) {
-    if (g_q_zlec == -1) return SERWIS_IPC_ERR;
-    MsgZlecenie m{};
+int serwis_ipc_recv_zlec(int stanowisko_id, Zlecenie& z) {
+    MsgZlec m{};
     long type = 100 + stanowisko_id;
-
-    if (msgrcv(g_q_zlec, &m, sizeof(MsgZlecenie) - sizeof(long), type, 0) == -1) {
-        perror("[IPC] msgrcv zlec");
-        return SERWIS_IPC_ERR;
-    }
-
-    s = m.s;
-    id_klienta = m.id_klienta;
-    oferta = m.oferta;
+    if (msgrcv(q_zlec, &m, sizeof(MsgZlec)-sizeof(long), type, 0) == -1) { perror("[IPC] msgrcv zlec"); return SERWIS_IPC_ERR; }
+    z = m.z;
     return SERWIS_IPC_OK;
 }
 
-int serwis_ipc_wyslij_raport(int id_klienta, int rzeczywisty_czas, int koszt_koncowy, int stanowisko_id, const Samochod& s) {
-    if (g_q_rap == -1) return SERWIS_IPC_ERR;
-    MsgRaport m{};
-    m.mtype = 1;
-    m.id_klienta = id_klienta;
-    m.stanowisko_id = stanowisko_id;
-    m.s = s;
-    m.rzeczywisty_czas = rzeczywisty_czas;
-    m.koszt_koncowy = koszt_koncowy;
-
-    if (msgsnd(g_q_rap, &m, sizeof(MsgRaport) - sizeof(long), 0) == -1) {
-        perror("[IPC] msgsnd raport");
-        return SERWIS_IPC_ERR;
-    }
+int serwis_ipc_send_rap(const Raport& r) {
+    MsgRap m{}; m.mtype = 1; m.r = r;
+    if (msgsnd(q_rap, &m, sizeof(MsgRap)-sizeof(long), 0) == -1) { perror("[IPC] msgsnd rap"); return SERWIS_IPC_ERR; }
     return SERWIS_IPC_OK;
 }
 
-int serwis_ipc_odbierz_raport(int& id_klienta, int& rzeczywisty_czas, int& koszt_koncowy, int& stanowisko_id, Samochod& s) {
-    if (g_q_rap == -1) return SERWIS_IPC_ERR;
-    MsgRaport m{};
-    if (msgrcv(g_q_rap, &m, sizeof(MsgRaport) - sizeof(long), 1, 0) == -1) {
-        perror("[IPC] msgrcv raport");
-        return SERWIS_IPC_ERR;
-    }
-
-    id_klienta = m.id_klienta;
-    rzeczywisty_czas = m.rzeczywisty_czas;
-    koszt_koncowy = m.koszt_koncowy;
-    stanowisko_id = m.stanowisko_id;
-    s = m.s;
+int serwis_ipc_recv_rap(Raport& r) {
+    MsgRap m{};
+    if (msgrcv(q_rap, &m, sizeof(MsgRap)-sizeof(long), 1, 0) == -1) { perror("[IPC] msgrcv rap"); return SERWIS_IPC_ERR; }
+    r = m.r;
     return SERWIS_IPC_OK;
 }
 
-// -------- Statystyki --------
-
-int serwis_stat_pobierz(SerwisStatystyki& out) {
-    if (!g_stats) return SERWIS_IPC_ERR;
+int serwis_stat_get(SerwisStatystyki& out) {
+    if (!shm) return SERWIS_IPC_ERR;
     if (sem_lock() == 0) {
-        out = *g_stats;
+        out = *shm;
         sem_unlock();
         return SERWIS_IPC_OK;
     }
     return SERWIS_IPC_ERR;
 }
 
-void serwis_stat_inc_przyjete() { if (g_stats) stat_inc(&g_stats->przyjete_zgloszenia); }
-void serwis_stat_inc_odrzucone_marka() { if (g_stats) stat_inc(&g_stats->odrzucone_marka); }
-void serwis_stat_inc_odrzucone_poza_godzinami() { if (g_stats) stat_inc(&g_stats->odrzucone_poza_godzinami); }
-void serwis_stat_inc_odrzucone_oferta() { if (g_stats) stat_inc(&g_stats->odrzucone_oferta); }
-void serwis_stat_inc_brak_stanowiska() { if (g_stats) stat_inc(&g_stats->brak_stanowiska); }
-void serwis_stat_inc_wyslane_zlecenia() { if (g_stats) stat_inc(&g_stats->wyslane_zlecenia); }
-void serwis_stat_inc_wykonane_naprawy() { if (g_stats) stat_inc(&g_stats->wykonane_naprawy); }
-void serwis_stat_inc_platnosci() { if (g_stats) stat_inc(&g_stats->platnosci); }
-
-#else
-
-// ---------------- Windows / non-Unix stub ----------------
-
-int serwis_ipc_init() {
-    std::cout << "[IPC] inicjalizacja struktur IPC (stub, brak IPC na tym systemie)" << std::endl;
-    return SERWIS_IPC_OK;
+void serwis_set_pozar(int v) {
+    if (!shm) return;
+    if (sem_lock() == 0) { shm->pozar = v ? 1 : 0; sem_unlock(); }
 }
 
-void serwis_ipc_cleanup() {
-    std::cout << "[IPC] sprzatanie struktur IPC (stub)" << std::endl;
+int serwis_get_pozar() {
+    if (!shm) return 0;
+    int v = 0;
+    if (sem_lock() == 0) { v = shm->pozar; sem_unlock(); }
+    return v;
 }
 
-void serwis_ipc_cleanup_all() {
-    std::cout << "[IPC] sprzatanie ALL (stub)" << std::endl;
+void serwis_station_set_busy(int id, int busy, char marka, int kryt, int dodatkowe, int tryb) {
+    if (!shm || id < 1 || id > 8) return;
+    if (sem_lock() == 0) {
+        shm->st[id].zajete = busy ? 1 : 0;
+        shm->st[id].marka = marka;
+        shm->st[id].krytyczna = kryt ? 1 : 0;
+        shm->st[id].dodatkowe = dodatkowe ? 1 : 0;
+        shm->st[id].tryb = tryb;
+        sem_unlock();
+    }
 }
 
-int serwis_ipc_wyslij_zgloszenie(const Samochod&) { return SERWIS_IPC_OK; }
-int serwis_ipc_odbierz_zgloszenie(Samochod&) { return SERWIS_IPC_ERR; }
+void serwis_station_inc_done(int id) {
+    if (!shm || id < 1 || id > 8) return;
+    if (sem_lock() == 0) { shm->st[id].obsluzone++; sem_unlock(); }
+}
 
-int serwis_ipc_wyslij_zlecenie(const Samochod&, int, int, const OfertaNaprawy&) { return SERWIS_IPC_OK; }
-int serwis_ipc_odbierz_zlecenie(int, Samochod&, int&, OfertaNaprawy&) { return SERWIS_IPC_ERR; }
+void serwis_station_set_closed(int id, int closed) {
+    if (!shm || id < 1 || id > 8) return;
+    if (sem_lock() == 0) { shm->st[id].zamkniete = closed ? 1 : 0; sem_unlock(); }
+}
 
-int serwis_ipc_wyslij_raport(int, int, int, int, const Samochod&) { return SERWIS_IPC_OK; }
-int serwis_ipc_odbierz_raport(int&, int&, int&, int&, Samochod&) { return SERWIS_IPC_ERR; }
+void serwis_req_close(int id, int v) {
+    if (!shm || id < 1 || id > 8) return;
+    if (sem_lock() == 0) { shm->req_close[id] = v ? 1 : 0; sem_unlock(); }
+}
 
-int serwis_stat_pobierz(SerwisStatystyki&) { return SERWIS_IPC_ERR; }
-void serwis_stat_inc_przyjete() {}
-void serwis_stat_inc_odrzucone_marka() {}
-void serwis_stat_inc_odrzucone_poza_godzinami() {}
-void serwis_stat_inc_odrzucone_oferta() {}
-void serwis_stat_inc_brak_stanowiska() {}
-void serwis_stat_inc_wyslane_zlecenia() {}
-void serwis_stat_inc_wykonane_naprawy() {}
-void serwis_stat_inc_platnosci() {}
-
-#endif
+int serwis_get_req_close(int id) {
+    if (!shm || id < 1 || id > 8) return 0;
+    int v = 0;
+    if (sem_lock() == 0) { v = shm->req_close[id]; sem_unlock(); }
+    return v;
+}

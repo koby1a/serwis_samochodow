@@ -1,242 +1,111 @@
-// pracownik_serwisu.cpp
-#include <iostream>
-#include <cstdlib>
-#include <string>
-#include "model.h"
+#include <unistd.h>
 #include "serwis_ipc.h"
-#include "stanowiska_status.h"
+#include "model.h"
 #include "logger.h"
 
-// Godziny serwisu (minuty w dobie): 08:00-16:00
 static const int TP = 8 * 60;
 static const int TK = 16 * 60;
-
-// Jezeli do otwarcia mniej niz T1, klient moze poczekac
 static const int T1 = 60;
-
-// K1/K2 (okienka rejestracji)
 static const int K1 = 3;
 static const int K2 = 5;
 
-static std::string serwis_parse_str(int argc, char** argv, const std::string& key, const std::string& domyslna) {
-    for (int i = 1; i + 1 < argc; ++i) {
-        if (std::string(argv[i]) == key) {
-            return std::string(argv[i + 1]);
-        }
-    }
-    return domyslna;
-}
-
-static int serwis_czy_w_godzinach(int t) {
-    return (t >= TP && t < TK) ? 1 : 0;
-}
-
-static int serwis_minuty_do_otwarcia(int t) {
-    if (t < TP) return TP - t;
-    if (t >= TK) return (1440 - t) + TP;
-    return 0;
-}
-
-static int serwis_czy_moze_czekac_poza_godzinami(const Samochod& s) {
-    if (s.krytyczna) return 1;
-    int do_otwarcia = serwis_minuty_do_otwarcia(s.czas_przyjazdu);
-    if (do_otwarcia < T1) return 1;
-    return 0;
-}
-
-static int serwis_aktualizuj_okienka(int aktywne_okienka, int dl_kolejki) {
-    if (aktywne_okienka < 1) aktywne_okienka = 1;
-    if (aktywne_okienka > 3) aktywne_okienka = 3;
-
-    if (dl_kolejki > K2) aktywne_okienka = 3;
-    else if (dl_kolejki > K1 && aktywne_okienka < 2) aktywne_okienka = 2;
-
-    if (aktywne_okienka >= 2 && dl_kolejki <= 2) aktywne_okienka = 1;
-    if (aktywne_okienka == 3 && dl_kolejki <= 3) {
-        aktywne_okienka = 2;
-        if (dl_kolejki <= 2) aktywne_okienka = 1;
-    }
-    return aktywne_okienka;
-}
-
-static int serwis_stanowisko_dostepne(int id) {
-    // Dostepne tylko gdy nie ma prosby o zamkniecie i nie jest zamkniete
-    if (serwis_stanowisko_ma_prosbe_zamkniecia(id)) return 0;
-    if (serwis_stanowisko_jest_zamkniete(id)) return 0;
+/**
+ * @brief Sprawdza dostepnosc stanowiska na podstawie SHM.
+ */
+static int stanowisko_dostepne(const SerwisStatystyki& st, int id) {
+    if (id < 1 || id > 8) return 0;
+    if (st.st[id].zamkniete) return 0;
+    if (st.req_close[id]) return 0;
     return 1;
 }
 
-static int serwis_wybierz_stanowisko_dla_marki(char marka, unsigned int* seed) {
-    if (marka >= 'a' && marka <= 'z') marka = static_cast<char>(marka - 'a' + 'A');
+/**
+ * @brief Wybiera stanowisko zgodnie z ograniczeniami i zamknieciami.
+ */
+static int wybierz_stanowisko(char marka, unsigned int* seed) {
+    SerwisStatystyki st{};
+    if (serwis_stat_get(st) != SERWIS_IPC_OK) return -1;
 
-    // U/Y: probujemy 8 (jesli dostepne), inaczej 1..7
-    if (marka == 'U' || marka == 'Y') {
-        int r = serwis_losuj_int(seed, 0, 99);
-        if (r < 40 && serwis_stanowisko_dostepne(8)) {
-            return 8;
-        }
+    if ((marka == 'U' || marka == 'Y') && serwis_losuj_int(seed, 0, 99) < 40) {
+        if (stanowisko_dostepne(st, 8)) return 8;
     }
 
-    // Round-robin po 1..7, ale pomijamy niedostepne
     static int rr = 1;
-    for (int probe = 0; probe < 7; ++probe) {
+    for (int k = 0; k < 7; ++k) {
         int cand = rr;
-        rr++;
-        if (rr > 7) rr = 1;
-        if (serwis_stanowisko_dostepne(cand)) return cand;
+        rr++; if (rr > 7) rr = 1;
+        if (stanowisko_dostepne(st, cand) && serwis_stanowisko_moze_obsluzyc(cand, marka)) return cand;
     }
 
-    // Jesli U/Y i 8 jednak dostepne, moze jeszcze tu
-    if ((marka == 'U' || marka == 'Y') && serwis_stanowisko_dostepne(8)) {
-        return 8;
-    }
-
+    if ((marka == 'U' || marka == 'Y') && stanowisko_dostepne(st, 8)) return 8;
     return -1;
 }
 
-int main(int argc, char** argv) {
-    std::string log_path = serwis_parse_str(argc, argv, "--log", "raport_symulacji.log");
-    serwis_logger_set_file(log_path.c_str());
-
-    std::cout << "[pracownik_serwisu] start" << std::endl;
-    serwis_log("pracownik", "start");
-
-    if (serwis_ipc_init() != SERWIS_IPC_OK) {
-        std::cerr << "[pracownik_serwisu] blad ipc_init" << std::endl;
-        serwis_log("pracownik", "blad ipc_init");
-        return EXIT_FAILURE;
-    }
-
-    serwis_logf("pracownik", "parametry Tp=%d Tk=%d T1=%d K1=%d K2=%d", TP, TK, T1, K1, K2);
+int main() {
+    serwis_logger_set_file("raport_symulacji.log");
+    if (serwis_ipc_init() != SERWIS_IPC_OK) return 1;
 
     unsigned int seed = 12345u;
-    int nastepne_id_klienta = 1;
+    int okienka = 1;
+    int kolejka = 0;
+    int next_client = 1;
 
-    int aktywne_okienka = 1;
-    int dl_kolejki = 0;
+    serwis_log("pracownik", "start");
 
-    const int MAKS_ZGLOSZEN = 500;
-
-    for (int iter = 0; iter < MAKS_ZGLOSZEN; ++iter) {
-        if (serwis_pozar_jest()) {
-            std::cout << "[pracownik_serwisu] pozar.flag -> koniec" << std::endl;
-            serwis_log("pracownik", "pozar.flag -> koniec");
-            break;
-        }
-
+    while (!serwis_get_pozar()) {
         Samochod s{};
-        std::cout << "[pracownik_serwisu] czekam na zgloszenie" << std::endl;
+        if (serwis_ipc_recv_zgl(s) != SERWIS_IPC_OK) break;
 
-        if (serwis_ipc_odbierz_zgloszenie(s) != SERWIS_IPC_OK) {
-            std::cerr << "[pracownik_serwisu] blad odbioru zgloszenia" << std::endl;
-            serwis_log("pracownik", "blad odbioru zgloszenia");
-            break;
-        }
+        kolejka++;
+        okienka = serwis_aktualizuj_okienka(okienka, kolejka, K1, K2);
 
-        serwis_logf("pracownik", "zgloszenie marka=%c czas_przyjazdu=%d krytyczna=%d",
-                    s.marka, s.czas_przyjazdu, s.krytyczna);
-
-        // Godziny otwarcia
-        if (!serwis_czy_w_godzinach(s.czas_przyjazdu)) {
-            int do_otwarcia = serwis_minuty_do_otwarcia(s.czas_przyjazdu);
-
-            if (!serwis_czy_moze_czekac_poza_godzinami(s)) {
-                std::cout << "[pracownik_serwisu] poza godzinami, klient nie moze czekac (do_otwarcia="
-                          << do_otwarcia << ") -> odjezdza" << std::endl;
-
-                serwis_logf("pracownik", "odrzut poza_godzinami do_otwarcia=%d", do_otwarcia);
-                serwis_stat_inc_odrzucone_poza_godzinami();
-                continue;
-            }
-
-            std::cout << "[pracownik_serwisu] poza godzinami, klient czeka (do_otwarcia="
-                      << do_otwarcia << ", krytyczna=" << s.krytyczna << ")" << std::endl;
-
-            serwis_logf("pracownik", "klient czeka poza_godzinami do_otwarcia=%d krytyczna=%d",
-                        do_otwarcia, s.krytyczna);
-        }
-
-        // Kolejka rejestracji + okienka
-        dl_kolejki++;
-        int stare = aktywne_okienka;
-        aktywne_okienka = serwis_aktualizuj_okienka(aktywne_okienka, dl_kolejki);
-        if (stare != aktywne_okienka) {
-            std::cout << "[pracownik_serwisu] zmiana okienek: " << stare
-                      << " -> " << aktywne_okienka << " (kolejka=" << dl_kolejki << ")" << std::endl;
-            serwis_logf("pracownik", "okienka %d -> %d (kolejka=%d)", stare, aktywne_okienka, dl_kolejki);
-        }
-
-        // Marka obslugiwana?
-        if (!serwis_czy_marka_obslugiwana(s.marka)) {
-            std::cout << "[pracownik_serwisu] marka nieobslugiwana -> klient odjezdza" << std::endl;
-            serwis_logf("pracownik", "odrzut marka=%c nieobslugiwana", s.marka);
-            serwis_stat_inc_odrzucone_marka();
-
-            dl_kolejki--;
-            aktywne_okienka = serwis_aktualizuj_okienka(aktywne_okienka, dl_kolejki);
+        if (!serwis_czy_moze_czekac_poza_godzinami(TP, TK, T1, s)) {
+            serwis_logf("pracownik", "odrzut poza_godzinami marka=%c t=%d", s.marka, s.czas_przyjazdu);
+            kolejka--;
             continue;
         }
 
-        // Oferta
+        if (!serwis_czy_marka_obslugiwana(s.marka)) {
+            serwis_logf("pracownik", "odrzut nieobslugiwana marka=%c", s.marka);
+            kolejka--;
+            continue;
+        }
+
         OfertaNaprawy oferta{};
         if (!serwis_utworz_oferte(&oferta, &seed, 2, 5, 0, SERWIS_TRYB_NORMALNY)) {
-            std::cout << "[pracownik_serwisu] nie udalo sie utworzyc oferty" << std::endl;
-            serwis_log("pracownik", "blad utworzenia oferty");
-
-            dl_kolejki--;
-            aktywne_okienka = serwis_aktualizuj_okienka(aktywne_okienka, dl_kolejki);
+            kolejka--;
             continue;
         }
 
-        // 2% odrzuca warunki
         int los = serwis_losuj_int(&seed, 0, 99);
         if (!serwis_klient_akceptuje_warunki(los, 2)) {
-            std::cout << "[pracownik_serwisu] klient odrzucil oferte -> odjezdza" << std::endl;
-            serwis_logf("pracownik", "odrzut oferta (2%%) los=%d", los);
-            serwis_stat_inc_odrzucone_oferta();
-
-            dl_kolejki--;
-            aktywne_okienka = serwis_aktualizuj_okienka(aktywne_okienka, dl_kolejki);
+            serwis_logf("pracownik", "odrzut oferty los=%d", los);
+            kolejka--;
             continue;
         }
 
-        // Wybor stanowiska (z pomijaniem zamknietych)
-        int stanowisko_id = serwis_wybierz_stanowisko_dla_marki(s.marka, &seed);
-        if (stanowisko_id == -1) {
-            std::cout << "[pracownik_serwisu] brak dostepnych stanowisk -> klient odjezdza" << std::endl;
-            serwis_log("pracownik", "brak dostepnych stanowisk -> odrzut");
-            serwis_stat_inc_brak_stanowiska();
-
-            dl_kolejki--;
-            aktywne_okienka = serwis_aktualizuj_okienka(aktywne_okienka, dl_kolejki);
+        int stid = wybierz_stanowisko(s.marka, &seed);
+        if (stid == -1) {
+            serwis_log("pracownik", "brak stanowiska -> odrzut");
+            kolejka--;
             continue;
         }
 
-        int id_klienta = nastepne_id_klienta++;
+        Zlecenie z{};
+        z.id_klienta = next_client++;
+        z.stanowisko_id = stid;
+        z.s = s;
+        z.oferta = oferta;
 
-        std::cout << "[pracownik_serwisu] rejestracja OK: id_klienta=" << id_klienta
-                  << ", stanowisko=" << stanowisko_id
-                  << ", koszt=" << oferta.koszt
-                  << ", czas=" << oferta.czas
-                  << std::endl;
+        serwis_logf("pracownik", "zlecenie id=%d st=%d marka=%c koszt=%d czas=%d okienka=%d",
+                    z.id_klienta, stid, s.marka, oferta.koszt, oferta.czas, okienka);
 
-        serwis_logf("pracownik", "rejestracja OK id_klienta=%d stanowisko=%d marka=%c koszt=%d czas=%d",
-                    id_klienta, stanowisko_id, s.marka, oferta.koszt, oferta.czas);
+        if (serwis_ipc_send_zlec(z) != SERWIS_IPC_OK) break;
 
-        if (serwis_ipc_wyslij_zlecenie(s, id_klienta, stanowisko_id, oferta) != SERWIS_IPC_OK) {
-            std::cerr << "[pracownik_serwisu] blad wysylki zlecenia" << std::endl;
-            serwis_logf("pracownik", "blad wysylki zlecenia id_klienta=%d stanowisko=%d", id_klienta, stanowisko_id);
-            break;
-        }
-
-        serwis_stat_inc_wyslane_zlecenia();
-
-        dl_kolejki--;
-        aktywne_okienka = serwis_aktualizuj_okienka(aktywne_okienka, dl_kolejki);
+        kolejka--;
     }
 
-    serwis_ipc_cleanup();
     serwis_log("pracownik", "koniec");
-    std::cout << "[pracownik_serwisu] koniec" << std::endl;
-    return EXIT_SUCCESS;
+    serwis_ipc_detach();
+    return 0;
 }
