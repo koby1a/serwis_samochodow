@@ -1,9 +1,9 @@
 /** @file dashboard.cpp */
 
 #include <iostream>
-#include <unistd.h>
 #include "serwis_ipc.h"
 #include "ui.h"
+#include "wait_utils.h"
 
 /** @brief Zwraca kolor dla marki. */
 static const char* marka_color(char m) {
@@ -33,7 +33,7 @@ int main() {
         SerwisStatystyki s{};
         if (serwis_stat_get(s) != SERWIS_IPC_OK) {
             std::cout << "dashboard: stat_get error\n";
-            usleep(200000);
+            serwis_wait_us(200000);
             continue;
         }
 
@@ -73,7 +73,7 @@ int main() {
         }
 
         std::cout << "\nCtrl+C / pozar zamyka symulacje.\n";
-        usleep(200000);
+        serwis_wait_us(200000);
     }
 
     serwis_ipc_detach();

@@ -9,6 +9,7 @@
 #include <csignal>
 #include "serwis_ipc.h"
 #include "logger.h"
+#include "wait_utils.h"
 
 static volatile sig_atomic_t g_stop = 0;
 
@@ -158,7 +159,7 @@ int main(int argc, char** argv) {
         }
         if (serwis_get_pozar()) break;
         if (p == kierowca_pid) break;
-        usleep((useconds_t)cfg.sim_tick_ms * 1000u);
+        serwis_wait_us((long long)cfg.sim_tick_ms * 1000LL);
         sim_time += cfg.sim_step_min;
         if (sim_time >= 1440) sim_time %= 1440;
         serwis_time_set(sim_time);
@@ -166,7 +167,7 @@ int main(int argc, char** argv) {
 
     serwis_log("main", "zakonczenie symulacji - czyszczenie");
     for (pid_t k : kids) if (k > 0) kill(k, SIGINT);
-    sleep(1);
+    serwis_wait_us(1000000);
     serwis_ipc_cleanup_all();
     return 0;
 }
