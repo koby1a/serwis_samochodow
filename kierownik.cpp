@@ -1,14 +1,11 @@
 #include <iostream>
-<<<<<<< HEAD
-=======
 #include <csignal>
 #include <unistd.h>
->>>>>>> 49aa6d4 (v20)
 #include "serwis_ipc.h"
 #include "logger.h"
 
 /**
- * @brief Proces kierownika: req_close i pozar.
+ * @brief Proces kierownika: sygnaly do mechanikow i pozar.
  */
 int main() {
     serwis_logger_set_file("raport_symulacji.log");
@@ -17,11 +14,7 @@ int main() {
     serwis_log("kierownik", "start");
 
     while (!serwis_get_pozar()) {
-<<<<<<< HEAD
-        std::cout << "\n[kierownik] 1) req_close 2) pozar 3) wyjdz\nwybor: ";
-=======
         std::cout << "\n[kierownik] 1) zamknij stanowisko 2) przyspiesz 3) przywroc 4) pozar 5) wyjdz\nwybor: ";
->>>>>>> 49aa6d4 (v20)
         int x = 0;
         if (!(std::cin >> x)) break;
 
@@ -31,13 +24,6 @@ int main() {
             std::cin >> id;
             if (id < 1 || id > 8) { std::cout << "bledne id\n"; continue; }
             serwis_req_close(id, 1);
-<<<<<<< HEAD
-            serwis_logf("kierownik", "req_close id=%d", id);
-        } else if (x == 2) {
-            serwis_set_pozar(1);
-            serwis_log("kierownik", "pozar");
-        } else if (x == 3) {
-=======
             int pid = serwis_station_get_pid(id);
             if (pid > 0) {
                 kill(pid, SIGUSR1);
@@ -63,7 +49,6 @@ int main() {
             serwis_set_pozar(1);
             serwis_log("kierownik", "pozar");
         } else if (x == 5) {
->>>>>>> 49aa6d4 (v20)
             break;
         }
     }

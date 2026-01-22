@@ -1,23 +1,23 @@
 #include <unistd.h>
+#include <string>
 #include "serwis_ipc.h"
 #include "model.h"
 #include "logger.h"
 
-static const int TP = 8 * 60;
-static const int TK = 16 * 60;
-static const int T1 = 60;
-static const int K1 = 3;
-static const int K2 = 5;
-<<<<<<< HEAD
-
-/**
- * @brief Sprawdza dostepnosc stanowiska na podstawie SHM.
- */
-=======
+static int TP = 8 * 60;
+static int TK = 16 * 60;
+static int T1 = 60;
+static int K1 = 3;
+static int K2 = 5;
 static const int KRIT_SERVICES[3] = {11, 29, 8};
 
+/** @brief Pobiera int z argv. */
+static int argi(int argc, char** argv, const char* k, int d) {
+    for (int i = 1; i + 1 < argc; ++i) if (std::string(argv[i]) == k) return std::atoi(argv[i + 1]);
+    return d;
+}
+
 /** @brief Sprawdza dostepnosc stanowiska na podstawie SHM. */
->>>>>>> 49aa6d4 (v20)
 static int stanowisko_dostepne(const SerwisStatystyki& st, int id) {
     if (id < 1 || id > 8) return 0;
     if (st.st[id].zamkniete) return 0;
@@ -25,13 +25,7 @@ static int stanowisko_dostepne(const SerwisStatystyki& st, int id) {
     return 1;
 }
 
-<<<<<<< HEAD
-/**
- * @brief Wybiera stanowisko zgodnie z ograniczeniami i zamknieciami.
- */
-=======
 /** @brief Wybiera stanowisko zgodnie z ograniczeniami i zamknieciami. */
->>>>>>> 49aa6d4 (v20)
 static int wybierz_stanowisko(char marka, unsigned int* seed) {
     SerwisStatystyki st{};
     if (serwis_stat_get(st) != SERWIS_IPC_OK) return -1;
@@ -51,13 +45,16 @@ static int wybierz_stanowisko(char marka, unsigned int* seed) {
     return -1;
 }
 
-<<<<<<< HEAD
-=======
-/** @brief Proces pracownika: rejestracja, oferta, wybor stanowiska, wysylka zlecen. */
->>>>>>> 49aa6d4 (v20)
-int main() {
+/** @brief Proces pracownika: rejestracja, oferta, wybor stanowiska, obsluga raportow. */
+int main(int argc, char** argv) {
     serwis_logger_set_file("raport_symulacji.log");
     if (serwis_ipc_init() != SERWIS_IPC_OK) return 1;
+
+    TP = argi(argc, argv, "--tp", TP);
+    TK = argi(argc, argv, "--tk", TK);
+    T1 = argi(argc, argv, "--t1", T1);
+    K1 = argi(argc, argv, "--k1", K1);
+    K2 = argi(argc, argv, "--k2", K2);
 
     unsigned int seed = 12345u;
     int okienka = 1;
@@ -67,10 +64,6 @@ int main() {
     serwis_log("pracownik", "start");
 
     while (!serwis_get_pozar()) {
-<<<<<<< HEAD
-        Samochod s{};
-        if (serwis_ipc_recv_zgl(s) != SERWIS_IPC_OK) break;
-=======
         while (true) {
             Raport r{};
             int rr = serwis_ipc_try_recv_rap(r);
@@ -106,18 +99,13 @@ int main() {
             if (serwis_get_pozar()) break;
             continue;
         }
->>>>>>> 49aa6d4 (v20)
 
         kolejka++;
         okienka = serwis_aktualizuj_okienka(okienka, kolejka, K1, K2);
 
         if (!serwis_czy_moze_czekac_poza_godzinami(TP, TK, T1, s)) {
-<<<<<<< HEAD
-            serwis_logf("pracownik", "odrzut poza_godzinami marka=%c t=%d", s.marka, s.czas_przyjazdu);
-=======
             serwis_logf("pracownik", "odrzut poza_godzinami marka=%c t=%d kryt=%d typ=%d",
                         s.marka, s.czas_przyjazdu, s.krytyczna, s.krytyczna_typ);
->>>>>>> 49aa6d4 (v20)
             kolejka--;
             continue;
         }
@@ -133,15 +121,12 @@ int main() {
             kolejka--;
             continue;
         }
-<<<<<<< HEAD
-=======
         if (s.krytyczna && s.krytyczna_typ >= 1 && s.krytyczna_typ <= 3) {
             int krit_id = KRIT_SERVICES[s.krytyczna_typ - 1];
             oferta.uslugi[0] = krit_id;
             oferta.koszt = serwis_oblicz_koszt(oferta.uslugi, oferta.liczba_uslug);
             oferta.czas  = serwis_oblicz_czas_z_uslug(oferta.uslugi, oferta.liczba_uslug, 0, SERWIS_TRYB_NORMALNY);
         }
->>>>>>> 49aa6d4 (v20)
 
         int los = serwis_losuj_int(&seed, 0, 99);
         if (!serwis_klient_akceptuje_warunki(los, 2)) {
@@ -163,12 +148,6 @@ int main() {
         z.s = s;
         z.oferta = oferta;
 
-<<<<<<< HEAD
-        serwis_logf("pracownik", "zlecenie id=%d st=%d marka=%c koszt=%d czas=%d okienka=%d",
-                    z.id_klienta, stid, s.marka, oferta.koszt, oferta.czas, okienka);
-
-        if (serwis_ipc_send_zlec(z) != SERWIS_IPC_OK) break;
-=======
         serwis_logf("pracownik", "zlecenie id=%d st=%d marka=%c koszt=%d czas=%d okienka=%d kryt=%d typ=%d",
                     z.id_klienta, stid, s.marka, oferta.koszt, oferta.czas, okienka,
                     s.krytyczna, s.krytyczna_typ);
@@ -176,7 +155,6 @@ int main() {
         if (serwis_ipc_send_zlec(z) != SERWIS_IPC_OK) {
             if (serwis_get_pozar()) break;
         }
->>>>>>> 49aa6d4 (v20)
 
         kolejka--;
     }

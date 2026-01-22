@@ -1,7 +1,3 @@
-<<<<<<< HEAD
-#include "serwis_ipc.h"
-#include <cstdio>
-=======
 /** @file serwis_ipc.cpp */
 
 #include "serwis_ipc.h"
@@ -10,24 +6,14 @@
 #include <cstdlib>
 #include <cstring>
 
->>>>>>> 49aa6d4 (v20)
 #include <sys/ipc.h>
 #include <sys/msg.h>
 #include <sys/shm.h>
 #include <sys/sem.h>
-<<<<<<< HEAD
+
 #include <unistd.h>
-
-static const int PERM = 0600;
-
-static int q_zgl = -1;
-static int q_zlec = -1;
-static int q_rap = -1;
-=======
-
-#include <unistd.h>     // readlink
-#include <libgen.h>     // dirname
-#include <limits.h>     // PATH_MAX
+#include <libgen.h>
+#include <limits.h>
 
 static const int PERM = 0600;
 
@@ -36,7 +22,6 @@ static int q_zlec = -1;
 static int q_rap  = -1;
 static int q_kasa = -1;
 static int q_ext  = -1;
->>>>>>> 49aa6d4 (v20)
 
 static int shm_id = -1;
 static int sem_id = -1;
@@ -44,11 +29,6 @@ static SerwisStatystyki* shm = nullptr;
 
 union semun { int val; struct semid_ds* buf; unsigned short* array; };
 
-<<<<<<< HEAD
-/** @brief ftok helper. */
-static key_t k(const char* path, int id) {
-    key_t kk = ftok(path, id);
-=======
 struct MsgZgl  { long mtype; Samochod s; };
 struct MsgZlec { long mtype; Zlecenie z; };
 struct MsgRap  { long mtype; Raport r; };
@@ -64,15 +44,12 @@ static const char* exe_dir() {
     char path_buf[PATH_MAX];
     ssize_t n = readlink("/proc/self/exe", path_buf, sizeof(path_buf) - 1);
     if (n <= 0) {
-        // Fallback: obecny katalog (mniej stabilny, ale lepsze niz nic)
         std::strcpy(dir_buf, ".");
         inited = 1;
         return dir_buf;
     }
 
     path_buf[n] = '\0';
-
-    // dirname moze modyfikowac bufor -> kopiujemy
     std::strncpy(dir_buf, path_buf, sizeof(dir_buf) - 1);
     dir_buf[sizeof(dir_buf) - 1] = '\0';
 
@@ -80,8 +57,6 @@ static const char* exe_dir() {
     if (!d) {
         std::strcpy(dir_buf, ".");
     } else {
-        // dirname zwraca wskaznik do dir_buf, ale moze byc krotszy
-        // upewniamy sie, ze w dir_buf jest wlasciwy string
         std::strncpy(dir_buf, d, sizeof(dir_buf) - 1);
         dir_buf[sizeof(dir_buf) - 1] = '\0';
     }
@@ -93,46 +68,11 @@ static const char* exe_dir() {
 /** @brief Tworzy klucz ftok na bazie katalogu exe (stabilne). */
 static key_t key_make(int id) {
     key_t kk = ftok(exe_dir(), id);
->>>>>>> 49aa6d4 (v20)
     if (kk == -1) perror("[IPC] ftok");
     return kk;
 }
 
-<<<<<<< HEAD
-/** @brief Lock semafora. */
-static int sem_lock() {
-    struct sembuf op{};
-    op.sem_num = 0; op.sem_op = -1; op.sem_flg = 0;
-    if (semop(sem_id, &op, 1) == -1) { perror("[IPC] semop lock"); return -1; }
-    return 0;
-}
-
-/** @brief Unlock semafora. */
-static int sem_unlock() {
-    struct sembuf op{};
-    op.sem_num = 0; op.sem_op = +1; op.sem_flg = 0;
-    if (semop(sem_id, &op, 1) == -1) { perror("[IPC] semop unlock"); return -1; }
-    return 0;
-}
-
-struct MsgZgl { long mtype; Samochod s; };
-struct MsgZlec { long mtype; Zlecenie z; };
-struct MsgRap { long mtype; Raport r; };
-
-int serwis_ipc_init() {
-    key_t kz  = k(".", 65);
-    key_t kzl = k(".", 66);
-    key_t kr  = k(".", 67);
-    key_t ksh = k(".", 68);
-    key_t kse = k(".", 69);
-    if (kz==-1||kzl==-1||kr==-1||ksh==-1||kse==-1) return SERWIS_IPC_ERR;
-=======
-/** @brief Lock semafora (mutex). Zwraca:
- *  0 ok,
- * -2 EINTR (mozna powtorzyc),
- * -3 EINVAL (stary/usuniety semafor),
- * -1 inne bledy.
- */
+/** @brief Lock semafora (mutex). */
 static int sem_lock() {
     if (sem_id < 0) return -1;
 
@@ -160,12 +100,7 @@ static int sem_lock() {
     return 0;
 }
 
-/** @brief Unlock semafora (mutex). Zwraca:
- *  0 ok,
- * -2 EINTR,
- * -3 EINVAL,
- * -1 inne.
- */
+/** @brief Unlock semafora (mutex). */
 static int sem_unlock() {
     if (sem_id < 0) return -1;
 
@@ -223,7 +158,6 @@ int serwis_ipc_init() {
     key_t ksh = key_make(68);
     key_t kse = key_make(69);
     if (kz==-1 || kzl==-1 || kr==-1 || kk==-1 || ke==-1 || ksh==-1 || kse==-1) return SERWIS_IPC_ERR;
->>>>>>> 49aa6d4 (v20)
 
     q_zgl = msgget(kz, IPC_CREAT | PERM);
     if (q_zgl == -1) { perror("[IPC] msgget zgl"); return SERWIS_IPC_ERR; }
@@ -234,9 +168,6 @@ int serwis_ipc_init() {
     q_rap = msgget(kr, IPC_CREAT | PERM);
     if (q_rap == -1) { perror("[IPC] msgget rap"); return SERWIS_IPC_ERR; }
 
-<<<<<<< HEAD
-    shm_id = shmget(ksh, sizeof(SerwisStatystyki), IPC_CREAT | PERM);
-=======
     q_kasa = msgget(kk, IPC_CREAT | PERM);
     if (q_kasa == -1) { perror("[IPC] msgget kasa"); return SERWIS_IPC_ERR; }
 
@@ -249,7 +180,6 @@ int serwis_ipc_init() {
         if (errno == EEXIST) {
             shm_id = shmget(ksh, sizeof(SerwisStatystyki), IPC_CREAT | PERM);
             if (shm_id == -1 && errno == EINVAL) {
-                // Stary segment SHM ma inny rozmiar po zmianach w strukturze.
                 int old_id = shmget(ksh, 1, PERM);
                 if (old_id != -1) shmctl(old_id, IPC_RMID, nullptr);
                 shm_id = shmget(ksh, sizeof(SerwisStatystyki), IPC_CREAT | IPC_EXCL | PERM);
@@ -259,20 +189,12 @@ int serwis_ipc_init() {
     } else {
         shm_created = true;
     }
->>>>>>> 49aa6d4 (v20)
     if (shm_id == -1) { perror("[IPC] shmget"); return SERWIS_IPC_ERR; }
 
     void* p = shmat(shm_id, nullptr, 0);
     if (p == (void*)-1) { perror("[IPC] shmat"); return SERWIS_IPC_ERR; }
     shm = (SerwisStatystyki*)p;
 
-<<<<<<< HEAD
-    sem_id = semget(kse, 1, IPC_CREAT | PERM);
-    if (sem_id == -1) { perror("[IPC] semget"); return SERWIS_IPC_ERR; }
-
-    semun u{}; u.val = 1;
-    if (semctl(sem_id, 0, SETVAL, u) == -1) perror("[IPC] semctl SETVAL");
-=======
     bool sem_created = false;
     sem_id = semget(kse, 1, IPC_CREAT | IPC_EXCL | PERM);
     if (sem_id == -1) {
@@ -290,7 +212,6 @@ int serwis_ipc_init() {
     if (shm_created) {
         shm_reset_all();
     } else {
-        // Bezpieczny reset tylko pozaru (restart po poprzednim uruchomieniu)
         int r;
         while ((r = sem_lock()) == -2) {}
         if (r == 0) {
@@ -298,17 +219,10 @@ int serwis_ipc_init() {
             while ((r = sem_unlock()) == -2) {}
         }
     }
->>>>>>> 49aa6d4 (v20)
 
     return SERWIS_IPC_OK;
 }
 
-<<<<<<< HEAD
-void serwis_ipc_detach() {
-    if (shm) { shmdt((void*)shm); shm = nullptr; }
-}
-
-=======
 /** @brief Odlacza SHM. */
 void serwis_ipc_detach() {
     if (shm) {
@@ -318,52 +232,30 @@ void serwis_ipc_detach() {
 }
 
 /** @brief Usuwa wszystkie zasoby IPC. */
->>>>>>> 49aa6d4 (v20)
 void serwis_ipc_cleanup_all() {
     if (q_zgl  != -1) if (msgctl(q_zgl,  IPC_RMID, nullptr) == -1) perror("[IPC] msgctl RMID zgl");
     if (q_zlec != -1) if (msgctl(q_zlec, IPC_RMID, nullptr) == -1) perror("[IPC] msgctl RMID zlec");
     if (q_rap  != -1) if (msgctl(q_rap,  IPC_RMID, nullptr) == -1) perror("[IPC] msgctl RMID rap");
-<<<<<<< HEAD
-    if (shm_id != -1) if (shmctl(shm_id, IPC_RMID, nullptr) == -1) perror("[IPC] shmctl RMID");
-    if (sem_id != -1) if (semctl(sem_id, 0, IPC_RMID) == -1) perror("[IPC] semctl RMID");
-
-    q_zgl = q_zlec = q_rap = -1;
-=======
     if (q_kasa != -1) if (msgctl(q_kasa, IPC_RMID, nullptr) == -1) perror("[IPC] msgctl RMID kasa");
     if (q_ext  != -1) if (msgctl(q_ext,  IPC_RMID, nullptr) == -1) perror("[IPC] msgctl RMID ext");
     if (shm_id != -1) if (shmctl(shm_id, IPC_RMID, nullptr) == -1) perror("[IPC] shmctl RMID");
     if (sem_id != -1) if (semctl(sem_id, 0, IPC_RMID) == -1) perror("[IPC] semctl RMID");
 
     q_zgl = q_zlec = q_rap = q_kasa = q_ext = -1;
->>>>>>> 49aa6d4 (v20)
     shm_id = sem_id = -1;
 }
 
 int serwis_ipc_send_zgl(const Samochod& s) {
     MsgZgl m{}; m.mtype = 1; m.s = s;
-<<<<<<< HEAD
-    if (msgsnd(q_zgl, &m, sizeof(MsgZgl)-sizeof(long), 0) == -1) { perror("[IPC] msgsnd zgl"); return SERWIS_IPC_ERR; }
-=======
     if (msgsnd(q_zgl, &m, sizeof(MsgZgl) - sizeof(long), 0) == -1) {
         perror("[IPC] msgsnd zgl");
         return SERWIS_IPC_ERR;
     }
->>>>>>> 49aa6d4 (v20)
     return SERWIS_IPC_OK;
 }
 
 int serwis_ipc_recv_zgl(Samochod& s) {
     MsgZgl m{};
-<<<<<<< HEAD
-    if (msgrcv(q_zgl, &m, sizeof(MsgZgl)-sizeof(long), 1, 0) == -1) { perror("[IPC] msgrcv zgl"); return SERWIS_IPC_ERR; }
-    s = m.s;
-    return SERWIS_IPC_OK;
-}
-
-int serwis_ipc_send_zlec(const Zlecenie& z) {
-    MsgZlec m{}; m.mtype = 100 + z.stanowisko_id; m.z = z;
-    if (msgsnd(q_zlec, &m, sizeof(MsgZlec)-sizeof(long), 0) == -1) { perror("[IPC] msgsnd zlec"); return SERWIS_IPC_ERR; }
-=======
     while (true) {
         ssize_t r = msgrcv(q_zgl, &m, sizeof(MsgZgl) - sizeof(long), 1, 0);
         if (r >= 0) { s = m.s; return SERWIS_IPC_OK; }
@@ -387,6 +279,91 @@ int serwis_ipc_try_recv_zgl(Samochod& s) {
             continue;
         }
         perror("[IPC] msgrcv zgl (nowait)");
+        return SERWIS_IPC_ERR;
+    }
+}
+
+int serwis_ipc_send_zlec(const Zlecenie& z) {
+    MsgZlec m{}; m.mtype = 100 + z.stanowisko_id; m.z = z;
+    if (msgsnd(q_zlec, &m, sizeof(MsgZlec) - sizeof(long), 0) == -1) {
+        perror("[IPC] msgsnd zlec");
+        return SERWIS_IPC_ERR;
+    }
+    return SERWIS_IPC_OK;
+}
+
+int serwis_ipc_recv_zlec(int stanowisko_id, Zlecenie& z) {
+    MsgZlec m{};
+    long type = 100 + stanowisko_id;
+    while (true) {
+        ssize_t r = msgrcv(q_zlec, &m, sizeof(MsgZlec) - sizeof(long), type, 0);
+        if (r >= 0) { z = m.z; return SERWIS_IPC_OK; }
+        if (errno == EINTR) {
+            if (shm && shm->pozar) return SERWIS_IPC_ERR;
+            continue;
+        }
+        perror("[IPC] msgrcv zlec");
+        return SERWIS_IPC_ERR;
+    }
+}
+
+int serwis_ipc_send_rap(const Raport& r) {
+    MsgRap m{}; m.mtype = 1; m.r = r;
+    if (msgsnd(q_rap, &m, sizeof(MsgRap) - sizeof(long), 0) == -1) {
+        perror("[IPC] msgsnd rap");
+        return SERWIS_IPC_ERR;
+    }
+    return SERWIS_IPC_OK;
+}
+
+int serwis_ipc_recv_rap(Raport& r) {
+    MsgRap m{};
+    while (true) {
+        ssize_t x = msgrcv(q_rap, &m, sizeof(MsgRap) - sizeof(long), 1, 0);
+        if (x >= 0) { r = m.r; return SERWIS_IPC_OK; }
+        if (errno == EINTR) {
+            if (shm && shm->pozar) return SERWIS_IPC_ERR;
+            continue;
+        }
+        perror("[IPC] msgrcv rap");
+        return SERWIS_IPC_ERR;
+    }
+}
+
+int serwis_ipc_try_recv_rap(Raport& r) {
+    MsgRap m{};
+    while (true) {
+        ssize_t x = msgrcv(q_rap, &m, sizeof(MsgRap) - sizeof(long), 1, IPC_NOWAIT);
+        if (x >= 0) { r = m.r; return SERWIS_IPC_OK; }
+        if (errno == ENOMSG) return SERWIS_IPC_NO_MSG;
+        if (errno == EINTR) {
+            if (shm && shm->pozar) return SERWIS_IPC_ERR;
+            continue;
+        }
+        perror("[IPC] msgrcv rap (nowait)");
+        return SERWIS_IPC_ERR;
+    }
+}
+
+int serwis_ipc_send_kasa(const Raport& r) {
+    MsgRap m{}; m.mtype = 1; m.r = r;
+    if (msgsnd(q_kasa, &m, sizeof(MsgRap) - sizeof(long), 0) == -1) {
+        perror("[IPC] msgsnd kasa");
+        return SERWIS_IPC_ERR;
+    }
+    return SERWIS_IPC_OK;
+}
+
+int serwis_ipc_recv_kasa(Raport& r) {
+    MsgRap m{};
+    while (true) {
+        ssize_t x = msgrcv(q_kasa, &m, sizeof(MsgRap) - sizeof(long), 1, 0);
+        if (x >= 0) { r = m.r; return SERWIS_IPC_OK; }
+        if (errno == EINTR) {
+            if (shm && shm->pozar) return SERWIS_IPC_ERR;
+            continue;
+        }
+        perror("[IPC] msgrcv kasa");
         return SERWIS_IPC_ERR;
     }
 }
@@ -453,117 +430,6 @@ int serwis_ipc_recv_extra_resp(int id_klienta, SerwisExtraResp& r) {
     }
 }
 
-int serwis_ipc_send_zlec(const Zlecenie& z) {
-    MsgZlec m{}; m.mtype = 100 + z.stanowisko_id; m.z = z;
-    if (msgsnd(q_zlec, &m, sizeof(MsgZlec) - sizeof(long), 0) == -1) {
-        perror("[IPC] msgsnd zlec");
-        return SERWIS_IPC_ERR;
-    }
->>>>>>> 49aa6d4 (v20)
-    return SERWIS_IPC_OK;
-}
-
-int serwis_ipc_recv_zlec(int stanowisko_id, Zlecenie& z) {
-    MsgZlec m{};
-    long type = 100 + stanowisko_id;
-<<<<<<< HEAD
-    if (msgrcv(q_zlec, &m, sizeof(MsgZlec)-sizeof(long), type, 0) == -1) { perror("[IPC] msgrcv zlec"); return SERWIS_IPC_ERR; }
-    z = m.z;
-    return SERWIS_IPC_OK;
-=======
-    while (true) {
-        ssize_t r = msgrcv(q_zlec, &m, sizeof(MsgZlec) - sizeof(long), type, 0);
-        if (r >= 0) { z = m.z; return SERWIS_IPC_OK; }
-        if (errno == EINTR) {
-            if (shm && shm->pozar) return SERWIS_IPC_ERR;
-            continue;
-        }
-        perror("[IPC] msgrcv zlec");
-        return SERWIS_IPC_ERR;
-    }
->>>>>>> 49aa6d4 (v20)
-}
-
-int serwis_ipc_send_rap(const Raport& r) {
-    MsgRap m{}; m.mtype = 1; m.r = r;
-<<<<<<< HEAD
-    if (msgsnd(q_rap, &m, sizeof(MsgRap)-sizeof(long), 0) == -1) { perror("[IPC] msgsnd rap"); return SERWIS_IPC_ERR; }
-=======
-    if (msgsnd(q_rap, &m, sizeof(MsgRap) - sizeof(long), 0) == -1) {
-        perror("[IPC] msgsnd rap");
-        return SERWIS_IPC_ERR;
-    }
->>>>>>> 49aa6d4 (v20)
-    return SERWIS_IPC_OK;
-}
-
-int serwis_ipc_recv_rap(Raport& r) {
-    MsgRap m{};
-<<<<<<< HEAD
-    if (msgrcv(q_rap, &m, sizeof(MsgRap)-sizeof(long), 1, 0) == -1) { perror("[IPC] msgrcv rap"); return SERWIS_IPC_ERR; }
-    r = m.r;
-    return SERWIS_IPC_OK;
-}
-
-int serwis_stat_get(SerwisStatystyki& out) {
-    if (!shm) return SERWIS_IPC_ERR;
-    if (sem_lock() == 0) {
-        out = *shm;
-        sem_unlock();
-        return SERWIS_IPC_OK;
-    }
-    return SERWIS_IPC_ERR;
-=======
-    while (true) {
-        ssize_t x = msgrcv(q_rap, &m, sizeof(MsgRap) - sizeof(long), 1, 0);
-        if (x >= 0) { r = m.r; return SERWIS_IPC_OK; }
-        if (errno == EINTR) {
-            if (shm && shm->pozar) return SERWIS_IPC_ERR;
-            continue;
-        }
-        perror("[IPC] msgrcv rap");
-        return SERWIS_IPC_ERR;
-    }
-}
-
-int serwis_ipc_try_recv_rap(Raport& r) {
-    MsgRap m{};
-    while (true) {
-        ssize_t x = msgrcv(q_rap, &m, sizeof(MsgRap) - sizeof(long), 1, IPC_NOWAIT);
-        if (x >= 0) { r = m.r; return SERWIS_IPC_OK; }
-        if (errno == ENOMSG) return SERWIS_IPC_NO_MSG;
-        if (errno == EINTR) {
-            if (shm && shm->pozar) return SERWIS_IPC_ERR;
-            continue;
-        }
-        perror("[IPC] msgrcv rap (nowait)");
-        return SERWIS_IPC_ERR;
-    }
-}
-
-int serwis_ipc_send_kasa(const Raport& r) {
-    MsgRap m{}; m.mtype = 1; m.r = r;
-    if (msgsnd(q_kasa, &m, sizeof(MsgRap) - sizeof(long), 0) == -1) {
-        perror("[IPC] msgsnd kasa");
-        return SERWIS_IPC_ERR;
-    }
-    return SERWIS_IPC_OK;
-}
-
-int serwis_ipc_recv_kasa(Raport& r) {
-    MsgRap m{};
-    while (true) {
-        ssize_t x = msgrcv(q_kasa, &m, sizeof(MsgRap) - sizeof(long), 1, 0);
-        if (x >= 0) { r = m.r; return SERWIS_IPC_OK; }
-        if (errno == EINTR) {
-            if (shm && shm->pozar) return SERWIS_IPC_ERR;
-            continue;
-        }
-        perror("[IPC] msgrcv kasa");
-        return SERWIS_IPC_ERR;
-    }
-}
-
 int serwis_stat_get(SerwisStatystyki& out) {
     if (!shm) return SERWIS_IPC_ERR;
 
@@ -577,14 +443,10 @@ int serwis_stat_get(SerwisStatystyki& out) {
     if (r != 0) return SERWIS_IPC_ERR;
 
     return SERWIS_IPC_OK;
->>>>>>> 49aa6d4 (v20)
 }
 
 void serwis_set_pozar(int v) {
     if (!shm) return;
-<<<<<<< HEAD
-    if (sem_lock() == 0) { shm->pozar = v ? 1 : 0; sem_unlock(); }
-=======
 
     int r;
     while ((r = sem_lock()) == -2) {}
@@ -594,15 +456,10 @@ void serwis_set_pozar(int v) {
 
     while ((r = sem_unlock()) == -2) {}
     (void)r;
->>>>>>> 49aa6d4 (v20)
 }
 
 int serwis_get_pozar() {
     if (!shm) return 0;
-<<<<<<< HEAD
-    int v = 0;
-    if (sem_lock() == 0) { v = shm->pozar; sem_unlock(); }
-=======
 
     int r;
     while ((r = sem_lock()) == -2) {}
@@ -645,27 +502,11 @@ int serwis_time_get() {
 
     if (v < 0) v = 0;
     v %= 1440;
->>>>>>> 49aa6d4 (v20)
     return v;
 }
 
 void serwis_station_set_busy(int id, int busy, char marka, int kryt, int dodatkowe, int tryb) {
     if (!shm || id < 1 || id > 8) return;
-<<<<<<< HEAD
-    if (sem_lock() == 0) {
-        shm->st[id].zajete = busy ? 1 : 0;
-        shm->st[id].marka = marka;
-        shm->st[id].krytyczna = kryt ? 1 : 0;
-        shm->st[id].dodatkowe = dodatkowe ? 1 : 0;
-        shm->st[id].tryb = tryb;
-        sem_unlock();
-    }
-}
-
-void serwis_station_inc_done(int id) {
-    if (!shm || id < 1 || id > 8) return;
-    if (sem_lock() == 0) { shm->st[id].obsluzone++; sem_unlock(); }
-=======
 
     int r;
     while ((r = sem_lock()) == -2) {}
@@ -679,6 +520,60 @@ void serwis_station_inc_done(int id) {
 
     while ((r = sem_unlock()) == -2) {}
     (void)r;
+}
+
+void serwis_station_inc_done(int id) {
+    if (!shm || id < 1 || id > 8) return;
+
+    int r;
+    while ((r = sem_lock()) == -2) {}
+    if (r != 0) return;
+
+    shm->st[id].obsluzone++;
+
+    while ((r = sem_unlock()) == -2) {}
+    (void)r;
+}
+
+void serwis_station_set_closed(int id, int closed) {
+    if (!shm || id < 1 || id > 8) return;
+
+    int r;
+    while ((r = sem_lock()) == -2) {}
+    if (r != 0) return;
+
+    shm->st[id].zamkniete = closed ? 1 : 0;
+
+    while ((r = sem_unlock()) == -2) {}
+    (void)r;
+}
+
+void serwis_req_close(int id, int v) {
+    if (!shm || id < 1 || id > 8) return;
+
+    int r;
+    while ((r = sem_lock()) == -2) {}
+    if (r != 0) return;
+
+    shm->req_close[id] = v ? 1 : 0;
+
+    while ((r = sem_unlock()) == -2) {}
+    (void)r;
+}
+
+int serwis_get_req_close(int id) {
+    if (!shm || id < 1 || id > 8) return 0;
+
+    int r;
+    while ((r = sem_lock()) == -2) {}
+    if (r != 0) return 0;
+
+    int v = shm->req_close[id];
+
+    while ((r = sem_unlock()) == -2) {}
+    (void)r;
+
+    return v;
 }
 
 void serwis_station_set_pid(int id, int pid) {
@@ -706,72 +601,5 @@ int serwis_station_get_pid(int id) {
     while ((r = sem_unlock()) == -2) {}
     (void)r;
 
-    return v;
-}
-void serwis_station_inc_done(int id) {
-    if (!shm || id < 1 || id > 8) return;
-
-    int r;
-    while ((r = sem_lock()) == -2) {}
-    if (r != 0) return;
-
-    shm->st[id].obsluzone++;
-
-    while ((r = sem_unlock()) == -2) {}
-    (void)r;
->>>>>>> 49aa6d4 (v20)
-}
-
-void serwis_station_set_closed(int id, int closed) {
-    if (!shm || id < 1 || id > 8) return;
-<<<<<<< HEAD
-    if (sem_lock() == 0) { shm->st[id].zamkniete = closed ? 1 : 0; sem_unlock(); }
-=======
-
-    int r;
-    while ((r = sem_lock()) == -2) {}
-    if (r != 0) return;
-
-    shm->st[id].zamkniete = closed ? 1 : 0;
-
-    while ((r = sem_unlock()) == -2) {}
-    (void)r;
->>>>>>> 49aa6d4 (v20)
-}
-
-void serwis_req_close(int id, int v) {
-    if (!shm || id < 1 || id > 8) return;
-<<<<<<< HEAD
-    if (sem_lock() == 0) { shm->req_close[id] = v ? 1 : 0; sem_unlock(); }
-=======
-
-    int r;
-    while ((r = sem_lock()) == -2) {}
-    if (r != 0) return;
-
-    shm->req_close[id] = v ? 1 : 0;
-
-    while ((r = sem_unlock()) == -2) {}
-    (void)r;
->>>>>>> 49aa6d4 (v20)
-}
-
-int serwis_get_req_close(int id) {
-    if (!shm || id < 1 || id > 8) return 0;
-<<<<<<< HEAD
-    int v = 0;
-    if (sem_lock() == 0) { v = shm->req_close[id]; sem_unlock(); }
-=======
-
-    int r;
-    while ((r = sem_lock()) == -2) {}
-    if (r != 0) return 0;
-
-    int v = shm->req_close[id];
-
-    while ((r = sem_unlock()) == -2) {}
-    (void)r;
-
->>>>>>> 49aa6d4 (v20)
     return v;
 }

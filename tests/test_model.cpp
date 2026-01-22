@@ -1,10 +1,6 @@
 #include <iostream>
 #include <cstdlib>
-<<<<<<< HEAD
-#include "model.h"
-=======
 #include "../model.h"
->>>>>>> 49aa6d4 (v20)
 
 #define ASSERT_TRUE(x) do{ if(!(x)){ std::cerr<<"Assertion failed: "<<#x<<" line "<<__LINE__<<"\n"; std::exit(3);} }while(0)
 

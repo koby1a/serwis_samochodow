@@ -1,132 +1,4 @@
 #pragma once
-<<<<<<< HEAD
-#include "model.h"
-
-enum SerwisIpcStatus { SERWIS_IPC_OK = 0, SERWIS_IPC_ERR = -1 };
-
-struct SerwisStationView {
-    int obsluzone;
-    int zajete;
-    char marka;
-    int krytyczna;
-    int dodatkowe;
-    int tryb;
-    int zamkniete;
-};
-
-struct SerwisStatystyki {
-    int przyjete_zgloszenia;
-    int odrzucone_marka;
-    int odrzucone_poza_godzinami;
-    int odrzucone_oferta;
-    int brak_stanowiska;
-    int wyslane_zlecenia;
-    int wykonane_naprawy;
-    int platnosci;
-    int pozar;
-    SerwisStationView st[9];
-    int req_close[9];
-};
-
-/**
- * @brief Inicjalizuje kolejki, shm i semafor.
- */
-int serwis_ipc_init();
-
-/**
- * @brief Odlacza pamiec dzielona (shmdt).
- */
-void serwis_ipc_detach();
-
-/**
- * @brief Usuwa wszystkie zasoby IPC (IPC_RMID).
- */
-void serwis_ipc_cleanup_all();
-
-struct Zlecenie {
-    int id_klienta;
-    int stanowisko_id;
-    Samochod s;
-    OfertaNaprawy oferta;
-};
-
-struct Raport {
-    int id_klienta;
-    int stanowisko_id;
-    Samochod s;
-    int czas;
-    int koszt;
-};
-
-/**
- * @brief Wysyla zgloszenie do kolejki.
- */
-int serwis_ipc_send_zgl(const Samochod& s);
-
-/**
- * @brief Odbiera zgloszenie z kolejki.
- */
-int serwis_ipc_recv_zgl(Samochod& s);
-
-/**
- * @brief Wysyla zlecenie (mtype = 100 + stanowisko_id).
- */
-int serwis_ipc_send_zlec(const Zlecenie& z);
-
-/**
- * @brief Odbiera zlecenie dla stanowiska.
- */
-int serwis_ipc_recv_zlec(int stanowisko_id, Zlecenie& z);
-
-/**
- * @brief Wysyla raport do kolejki.
- */
-int serwis_ipc_send_rap(const Raport& r);
-
-/**
- * @brief Odbiera raport z kolejki.
- */
-int serwis_ipc_recv_rap(Raport& r);
-
-/**
- * @brief Kopiuje statystyki z SHM do out.
- */
-int serwis_stat_get(SerwisStatystyki& out);
-
-/**
- * @brief Ustawia flage pozaru.
- */
-void serwis_set_pozar(int v);
-
-/**
- * @brief Pobiera flage pozaru.
- */
-int serwis_get_pozar();
-
-/**
- * @brief Aktualizuje widok stanowiska: zajete/marka/krytyczna/dodatkowe/tryb.
- */
-void serwis_station_set_busy(int id, int busy, char marka, int kryt, int dodatkowe, int tryb);
-
-/**
- * @brief Inkrementuje licznik obsluzonych aut na stanowisku.
- */
-void serwis_station_inc_done(int id);
-
-/**
- * @brief Ustawia flage zamkniecia stanowiska.
- */
-void serwis_station_set_closed(int id, int closed);
-
-/**
- * @brief Ustawia prosbe zamkniecia (req_close) dla stanowiska.
- */
-void serwis_req_close(int id, int v);
-
-/**
- * @brief Pobiera prosbe zamkniecia dla stanowiska.
- */
-=======
 /** @file serwis_ipc.h */
 
 #include "model.h"
@@ -147,6 +19,14 @@ struct SerwisStationView {
     int pid;         // PID mechanika
 };
 
+/** @brief Stan serwisu w SHM. Indeksy 1..8 sa uzywane. */
+struct SerwisStatystyki {
+    int pozar; // 0/1
+    int sim_time_min; // 0..1439, czas symulacji
+    SerwisStationView st[9];
+    int req_close[9]; // prosba o zamkniecie stanowiska (1..8)
+};
+
 /** @brief Zapytanie o dodatkowe usterki. */
 struct SerwisExtraReq {
     int id_klienta;
@@ -159,14 +39,6 @@ struct SerwisExtraReq {
 struct SerwisExtraResp {
     int id_klienta;
     int akceptacja; // 0/1
-};
-
-/** @brief Stan serwisu w SHM. Indeksy 1..8 sa uzywane. */
-struct SerwisStatystyki {
-    int pozar; // 0/1
-    int sim_time_min; // 0..1439, czas symulacji
-    SerwisStationView st[9];
-    int req_close[9]; // prosba o zamkniecie stanowiska (1..8)
 };
 
 /** @brief Inicjalizuje IPC (kolejki + shm + sem). */
@@ -184,13 +56,16 @@ int serwis_ipc_send_zgl(const Samochod& s);
 /** @brief Odbiera zgloszenie samochodu (blokujaco, odporne na EINTR). */
 int serwis_ipc_recv_zgl(Samochod& s);
 
+/** @brief Odbiera zgloszenie nieblokujaco (NO_MSG gdy brak). */
+int serwis_ipc_try_recv_zgl(Samochod& s);
+
 /** @brief Wysyla zlecenie do mechanika (mtype = 100 + stanowisko_id). */
 int serwis_ipc_send_zlec(const Zlecenie& z);
 
 /** @brief Odbiera zlecenie dla stanowiska (blokujaco, odporne na EINTR). */
 int serwis_ipc_recv_zlec(int stanowisko_id, Zlecenie& z);
 
-/** @brief Wysyla raport do kasjera. */
+/** @brief Wysyla raport do pracownika. */
 int serwis_ipc_send_rap(const Raport& r);
 
 /** @brief Odbiera raport (blokujaco, odporne na EINTR). */
@@ -204,9 +79,6 @@ int serwis_ipc_send_kasa(const Raport& r);
 
 /** @brief Odbiera raport w kasie (blokujaco). */
 int serwis_ipc_recv_kasa(Raport& r);
-
-/** @brief Odbiera zgloszenie nieblokujaco (NO_MSG gdy brak). */
-int serwis_ipc_try_recv_zgl(Samochod& s);
 
 /** @brief Wysyla zapytanie o dodatkowe usterki. */
 int serwis_ipc_send_extra_req(const SerwisExtraReq& r);
@@ -241,12 +113,6 @@ int serwis_time_get();
 /** @brief Aktualizuje widok stanowiska. */
 void serwis_station_set_busy(int id, int busy, char marka, int kryt, int dodatkowe, int tryb);
 
-/** @brief Ustawia PID mechanika dla stanowiska. */
-void serwis_station_set_pid(int id, int pid);
-
-/** @brief Pobiera PID mechanika dla stanowiska. */
-int serwis_station_get_pid(int id);
-
 /** @brief Zwieksza licznik obsluzonych dla stanowiska. */
 void serwis_station_inc_done(int id);
 
@@ -257,5 +123,10 @@ void serwis_station_set_closed(int id, int closed);
 void serwis_req_close(int id, int v);
 
 /** @brief Pobiera prosbe o zamkniecie stanowiska. */
->>>>>>> 49aa6d4 (v20)
 int serwis_get_req_close(int id);
+
+/** @brief Ustawia PID mechanika dla stanowiska. */
+void serwis_station_set_pid(int id, int pid);
+
+/** @brief Pobiera PID mechanika dla stanowiska. */
+int serwis_station_get_pid(int id);
