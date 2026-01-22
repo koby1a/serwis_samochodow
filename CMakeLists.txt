@@ -7,6 +7,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_compile_options(-Wall -Wextra -Wpedantic)
 
+<<<<<<< HEAD
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 add_library(serwis_core
@@ -39,3 +40,55 @@ target_link_libraries(dashboard PRIVATE serwis_core)
 
 add_executable(test_model tests/test_model.cpp)
 target_link_libraries(test_model PRIVATE serwis_core)
+=======
+# Wspolne pliki (logika + IPC + UI)
+set(SERWIS_CORE
+        model.cpp
+        serwis_ipc.cpp
+        logger.cpp
+        ui.cpp
+)
+
+# Program glowny (starter - uruchamia inne procesy)
+add_executable(serwis_samochodow
+        main.cpp
+        ${SERWIS_CORE}
+)
+
+# Procesy
+add_executable(kierowca
+        kierowca.cpp
+        ${SERWIS_CORE}
+)
+
+add_executable(pracownik_serwisu
+        pracownik_serwisu.cpp
+        ${SERWIS_CORE}
+)
+
+add_executable(mechanik
+        mechanik.cpp
+        ${SERWIS_CORE}
+)
+
+add_executable(kasjer
+        kasjer.cpp
+        ${SERWIS_CORE}
+)
+
+add_executable(kierownik
+        kierownik.cpp
+        ${SERWIS_CORE}
+)
+
+add_executable(dashboard
+        dashboard.cpp
+        ${SERWIS_CORE}
+)
+
+# Testy jednostkowe
+add_executable(test_model
+        tests/test_model.cpp
+        ${SERWIS_CORE}
+)
+>>>>>>> 49aa6d4 (v20)
