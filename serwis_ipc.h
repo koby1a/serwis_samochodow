@@ -64,6 +64,8 @@ int serwis_ipc_send_zlec(const Zlecenie& z);
 
 /** @brief Odbiera zlecenie dla stanowiska (blokujaco, odporne na EINTR). */
 int serwis_ipc_recv_zlec(int stanowisko_id, Zlecenie& z);
+/** @brief Odbiera zlecenie dla stanowiska (nieblokujaco). */
+int serwis_ipc_try_recv_zlec(int stanowisko_id, Zlecenie& z);
 
 /** @brief Wysyla raport do pracownika. */
 int serwis_ipc_send_rap(const Raport& r);

@@ -312,6 +312,22 @@ int serwis_ipc_recv_zlec(int stanowisko_id, Zlecenie& z) {
     }
 }
 
+int serwis_ipc_try_recv_zlec(int stanowisko_id, Zlecenie& z) {
+    MsgZlec m{};
+    long type = 100 + stanowisko_id;
+    while (true) {
+        ssize_t r = msgrcv(q_zlec, &m, sizeof(MsgZlec) - sizeof(long), type, IPC_NOWAIT);
+        if (r >= 0) { z = m.z; return SERWIS_IPC_OK; }
+        if (errno == ENOMSG) return SERWIS_IPC_NO_MSG;
+        if (errno == EINTR) {
+            if (shm && shm->pozar) return SERWIS_IPC_ERR;
+            continue;
+        }
+        perror("[IPC] msgrcv zlec (nowait)");
+        return SERWIS_IPC_ERR;
+    }
+}
+
 int serwis_ipc_send_rap(const Raport& r) {
     MsgRap m{}; m.mtype = 1; m.r = r;
     if (msgsnd(q_rap, &m, sizeof(MsgRap) - sizeof(long), 0) == -1) {

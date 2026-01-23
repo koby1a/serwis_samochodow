@@ -165,8 +165,39 @@ int main(int argc, char** argv) {
     }
 
     serwis_log("main", "zakonczenie symulacji - czyszczenie");
+    serwis_set_pozar(1);
     for (pid_t k : kids) if (k > 0) kill(k, SIGINT);
-    usleep((useconds_t)1000000);
+
+    int alive = 0;
+    for (pid_t k : kids) if (k > 0) alive++;
+
+    auto reap = [&]() {
+        int status;
+        pid_t p;
+        while ((p = waitpid(-1, &status, WNOHANG)) > 0) {
+            for (pid_t& k : kids) {
+                if (k == p) {
+                    k = -1;
+                    alive--;
+                    break;
+                }
+            }
+        }
+    };
+
+    for (int i = 0; i < 40 && alive > 0; ++i) {
+        reap();
+        usleep((useconds_t)50000);
+    }
+
+    if (alive > 0) {
+        for (pid_t k : kids) if (k > 0) kill(k, SIGKILL);
+        for (int i = 0; i < 20 && alive > 0; ++i) {
+            reap();
+            usleep((useconds_t)50000);
+        }
+    }
+
     serwis_ipc_cleanup_all();
     return 0;
 }

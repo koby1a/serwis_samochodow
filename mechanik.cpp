@@ -46,16 +46,30 @@ int main(int argc, char** argv) {
     serwis_station_set_pid(id, (int)getpid());
     serwis_logf("mechanik", "start id=%d pid=%d", id, (int)getpid());
 
+    int busy = 0;
     while (!serwis_get_pozar()) {
         if (serwis_get_req_close(id)) g_zamknij_po = 1;
+        else g_zamknij_po = 0;
+
+        if (g_zamknij_po && !busy) {
+            serwis_station_set_closed(id, 1);
+            serwis_req_close(id, 0);
+            g_zamknij_po = 0;
+        }
 
         Zlecenie z{};
-        if (serwis_ipc_recv_zlec(id, z) != SERWIS_IPC_OK) {
+        int rz = serwis_ipc_try_recv_zlec(id, z);
+        if (rz == SERWIS_IPC_NO_MSG) {
+            usleep((useconds_t)20000);
+            continue;
+        }
+        if (rz != SERWIS_IPC_OK) {
             if (serwis_get_pozar()) break;
             continue;
         }
         if (serwis_get_pozar()) break;
 
+        busy = 1;
         serwis_station_set_busy(id, 1, z.s.marka, z.s.krytyczna, 0, (int)g_tryb);
 
         unsigned int seed = (unsigned int)(id * 1111 + z.id_klienta * 7);
@@ -103,6 +117,7 @@ int main(int argc, char** argv) {
 
         serwis_station_inc_done(id);
         serwis_station_set_busy(id, 0, '-', 0, 0, (int)g_tryb);
+        busy = 0;
 
         if (g_zamknij_po) {
             serwis_station_set_closed(id, 1);
