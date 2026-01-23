@@ -1,8 +1,8 @@
 #include <string>
+#include <unistd.h>
 #include "serwis_ipc.h"
 #include "model.h"
 #include "logger.h"
-#include "wait_utils.h"
 
 static int TP = 8 * 60;
 static int TK = 16 * 60;
@@ -92,7 +92,7 @@ int main(int argc, char** argv) {
         Samochod s{};
         int zr = serwis_ipc_try_recv_zgl(s);
         if (zr == SERWIS_IPC_NO_MSG) {
-            serwis_wait_us(50000);
+            usleep((useconds_t)50000);
             continue;
         }
         if (zr != SERWIS_IPC_OK) {

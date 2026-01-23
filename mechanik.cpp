@@ -5,7 +5,6 @@
 #include "serwis_ipc.h"
 #include "model.h"
 #include "logger.h"
-#include "wait_utils.h"
 
 static SerwisTrybPracy g_tryb = SERWIS_TRYB_NORMALNY;
 static int g_zamknij_po = 0;
@@ -91,7 +90,7 @@ int main(int argc, char** argv) {
         int czas = serwis_oblicz_czas_naprawy(z.oferta.czas, czas_dod, g_tryb);
         int koszt = z.oferta.koszt + koszt_dod;
 
-        serwis_wait_us((long long)czas * 1000LL);
+        usleep((useconds_t)((long long)czas * 1000LL));
 
         Raport r{};
         r.id_klienta = z.id_klienta;
@@ -108,7 +107,7 @@ int main(int argc, char** argv) {
         if (g_zamknij_po) {
             serwis_station_set_closed(id, 1);
             serwis_req_close(id, 0);
-            break;
+            g_zamknij_po = 0;
         }
     }
 

@@ -1,10 +1,10 @@
 #include <cstdlib>
 #include <string>
 #include <vector>
+#include <unistd.h>
 #include "serwis_ipc.h"
 #include "model.h"
 #include "logger.h"
-#include "wait_utils.h"
 
 /**
  * @brief Pobiera int z argv.
@@ -55,7 +55,7 @@ int main(int argc, char** argv) {
     int sent = 0;
     for (size_t i = 0; i < fixed.size() && sent < n && !serwis_get_pozar(); ++i, ++sent) {
         if (serwis_ipc_send_zgl(fixed[i]) != SERWIS_IPC_OK) break;
-        serwis_wait_us((long long)sleep_ms * 1000LL);
+        usleep((useconds_t)((long long)sleep_ms * 1000LL));
     }
 
     for (; sent < n && !serwis_get_pozar(); ++sent) {
@@ -72,7 +72,7 @@ int main(int argc, char** argv) {
         s.czas_naprawy = 0;
 
         if (serwis_ipc_send_zgl(s) != SERWIS_IPC_OK) break;
-        serwis_wait_us((long long)sleep_ms * 1000LL);
+        usleep((useconds_t)((long long)sleep_ms * 1000LL));
     }
 
     serwis_log("kierowca", "koniec");
