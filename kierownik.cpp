@@ -9,7 +9,7 @@
 /**
  * @brief Proces kierownika: sygnaly do mechanikow i pozar.
  */
-static int read_station_id() {
+static int wczytaj_id_stanowiska() {
     int id = 0;
     std::cout << "id (1..8): ";
     if (!(std::cin >> id)) return -1;
@@ -25,7 +25,7 @@ static int argi(int argc, char** argv, const char* k, int d) {
     return d;
 }
 
-static void print_menu() {
+static void wypisz_menu() {
     std::cout
         << "\n[kierownik] MENU\n"
         << "  Stanowiska:\n"
@@ -49,12 +49,12 @@ int main(int argc, char** argv) {
     serwis_log("kierownik", "start");
 
     while (!serwis_get_pozar()) {
-        print_menu();
+        wypisz_menu();
         int x = 0;
         if (!(std::cin >> x)) break;
 
         if (x == 1) {
-            int id = read_station_id();
+            int id = wczytaj_id_stanowiska();
             if (id == -1) continue;
             serwis_req_close(id, 1);
             int pid = serwis_station_get_pid(id);
@@ -65,13 +65,13 @@ int main(int argc, char** argv) {
                 std::cout << "brak pid dla stanowiska\n";
             }
         } else if (x == 2) {
-            int id = read_station_id();
+            int id = wczytaj_id_stanowiska();
             if (id == -1) continue;
             serwis_station_set_closed(id, 0);
             serwis_req_close(id, 0);
             serwis_logf("kierownik", "open id=%d", id);
         } else if (x == 3 || x == 4) {
-            int id = read_station_id();
+            int id = wczytaj_id_stanowiska();
             if (id == -1) continue;
             int pid = serwis_station_get_pid(id);
             if (pid <= 0) { std::cout << "brak pid dla stanowiska\n"; continue; }

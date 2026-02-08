@@ -9,7 +9,7 @@
 #include "time_scale.h"
 
 /** @brief Zwraca kolor dla marki. */
-static const char* marka_color(char m) {
+static const char* kolor_marki(char m) {
     switch (m) {
         case 'A': return ui_cyan();
         case 'E': return ui_green();
@@ -84,7 +84,7 @@ int main(int argc, char** argv) {
             else std::cout << ui_gray() << "WOLNE" << ui_reset();
 
             std::cout << " | obsluzone=" << st.obsluzone;
-            std::cout << " | marka=" << marka_color(st.marka) << st.marka << ui_reset();
+            std::cout << " | marka=" << kolor_marki(st.marka) << st.marka << ui_reset();
 
             if (st.krytyczna) std::cout << " " << ui_red() << "[KRYTYCZNA]" << ui_reset();
             if (st.dodatkowe) std::cout << " " << ui_yellow() << "[DODATKOWE]" << ui_reset();

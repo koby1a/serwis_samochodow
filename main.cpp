@@ -17,11 +17,11 @@
 
 static volatile sig_atomic_t g_stop = 0;
 
-static void on_sig(int sig) {
+static void obsluz_sig(int sig) {
     if (sig == SIGINT || sig == SIGTERM) g_stop = 1;
 }
 
-static pid_t spawnp(const char* prog, const std::vector<std::string>& args) {
+static pid_t uruchom_program(const char* prog, const std::vector<std::string>& args) {
     pid_t pid = fork();
     if (pid == 0) {
         std::vector<char*> argv;
@@ -62,7 +62,7 @@ static std::string args(int argc, char** argv, const std::string& k, const std::
     return d;
 }
 
-static void apply_kv(SimConfig& c, const std::string& key, const std::string& val) {
+static void zastosuj_kv(SimConfig& c, const std::string& key, const std::string& val) {
     if (key == "n") c.n = std::atoi(val.c_str());
     else if (key == "sleep_ms") c.sleep_ms = std::atoi(val.c_str());
     else if (key == "seed") c.seed = std::atoi(val.c_str());
@@ -80,7 +80,7 @@ static void apply_kv(SimConfig& c, const std::string& key, const std::string& va
     else if (key == "scenario") c.scenario = val;
 }
 
-static void load_config(const std::string& path, SimConfig& c) {
+static void wczytaj_konfig(const std::string& path, SimConfig& c) {
     if (path.empty()) return;
     std::ifstream f(path);
     if (!f) {
@@ -93,7 +93,7 @@ static void load_config(const std::string& path, SimConfig& c) {
         std::istringstream ss(line);
         std::string key, val;
         if (std::getline(ss, key, '=') && std::getline(ss, val)) {
-            if (!key.empty() && !val.empty()) apply_kv(c, key, val);
+            if (!key.empty() && !val.empty()) zastosuj_kv(c, key, val);
         }
     }
 }
@@ -105,14 +105,14 @@ int main(int argc, char** argv) {
     if (serwis_ipc_init() != SERWIS_IPC_OK) return 1;
 
     struct sigaction sa{};
-    sa.sa_handler = on_sig;
+    sa.sa_handler = obsluz_sig;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     if (sigaction(SIGINT, &sa, nullptr) == -1) perror("[main] sigaction SIGINT");
     if (sigaction(SIGTERM, &sa, nullptr) == -1) perror("[main] sigaction SIGTERM");
 
     SimConfig cfg;
-    load_config(args(argc, argv, "--config", ""), cfg);
+    wczytaj_konfig(args(argc, argv, "--config", ""), cfg);
     cfg.n = argi(argc, argv, "--n", cfg.n);
     cfg.sleep_ms = argi(argc, argv, "--sleep_ms", cfg.sleep_ms);
     cfg.seed = argi(argc, argv, "--seed", cfg.seed);
@@ -139,13 +139,13 @@ int main(int argc, char** argv) {
     }
 
     std::vector<pid_t> kids;
-    kids.push_back(spawnp("./dashboard", {
+    kids.push_back(uruchom_program("./dashboard", {
         "--time_scale", std::to_string(cfg.time_scale)
     }));
-    kids.push_back(spawnp("./kasjer", {
+    kids.push_back(uruchom_program("./kasjer", {
         "--time_scale", std::to_string(cfg.time_scale)
     }));
-    kids.push_back(spawnp("./pracownik_serwisu", {
+    kids.push_back(uruchom_program("./pracownik_serwisu", {
         "--tp", std::to_string(cfg.tp),
         "--tk", std::to_string(cfg.tk),
         "--t1", std::to_string(cfg.t1),
@@ -155,14 +155,14 @@ int main(int argc, char** argv) {
         "--workers", std::to_string(cfg.workers)
     }));
     for (int id = 1; id <= 8; ++id)
-        kids.push_back(spawnp("./mechanik", {
+        kids.push_back(uruchom_program("./mechanik", {
             "--id", std::to_string(id),
             "--time_scale", std::to_string(cfg.time_scale)
         }));
-    kids.push_back(spawnp("./kierownik", {
+    kids.push_back(uruchom_program("./kierownik", {
         "--time_scale", std::to_string(cfg.time_scale)
     }));
-    kids.push_back(spawnp("./kierowca", {
+    kids.push_back(uruchom_program("./kierowca", {
         "--n", std::to_string(cfg.n),
         "--sleep_ms", std::to_string(cfg.sleep_ms),
         "--seed", std::to_string(cfg.seed),

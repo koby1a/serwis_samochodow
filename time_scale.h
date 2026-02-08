@@ -6,11 +6,13 @@
 #include "serwis_ipc.h"
 
 static inline int serwis_norm_time_scale(int scale) {
-    return (scale <= 0) ? 1 : scale;
+    if (scale <= 0) return 1;
+    return scale;
 }
 
 static inline int serwis_time_scale_effective(int scale) {
-    return (scale > 0) ? scale : 1;
+    if (scale > 0) return scale;
+    return 1;
 }
 
 static inline void serwis_sleep_us_scaled(long long us, int scale) {

@@ -18,18 +18,24 @@ int serwis_losuj_int(unsigned int* seed, int a, int b) {
 
 int serwis_czy_marka_obslugiwana(char marka) {
     marka = norm_marka(marka);
-    return (marka=='A'||marka=='E'||marka=='I'||marka=='O'||marka=='U'||marka=='Y') ? 1 : 0;
+    if (marka=='A'||marka=='E'||marka=='I'||marka=='O'||marka=='U'||marka=='Y') return 1;
+    return 0;
 }
 
 int serwis_stanowisko_moze_obsluzyc(int stanowisko_id, char marka) {
     marka = norm_marka(marka);
     if (!serwis_czy_marka_obslugiwana(marka)) return 0;
-    if (stanowisko_id == 8) return (marka=='U' || marka=='Y') ? 1 : 0;
-    return (stanowisko_id >= 1 && stanowisko_id <= 7) ? 1 : 0;
+    if (stanowisko_id == 8) {
+        if (marka=='U' || marka=='Y') return 1;
+        return 0;
+    }
+    if (stanowisko_id >= 1 && stanowisko_id <= 7) return 1;
+    return 0;
 }
 
 int serwis_czy_w_godzinach(int Tp, int Tk, int t) {
-    return (t >= Tp && t < Tk) ? 1 : 0;
+    if (t >= Tp && t < Tk) return 1;
+    return 0;
 }
 
 int serwis_minuty_do_otwarcia(int Tp, int Tk, int t) {
@@ -42,7 +48,8 @@ int serwis_czy_moze_czekac_poza_godzinami(int Tp, int Tk, int T1, const Samochod
     if (serwis_czy_w_godzinach(Tp, Tk, s.czas_przyjazdu)) return 1;
     if (s.krytyczna) return 1;
     int do_otwarcia = serwis_minuty_do_otwarcia(Tp, Tk, s.czas_przyjazdu);
-    return (do_otwarcia < T1) ? 1 : 0;
+    if (do_otwarcia < T1) return 1;
+    return 0;
 }
 
 int serwis_aktualizuj_okienka(int aktywne_okienka, int dl_kolejki, int K1, int K2) {
@@ -145,13 +152,15 @@ int serwis_oblicz_czas_z_uslug(const int* lista_uslug, int liczba_uslug, int cza
 int serwis_klient_akceptuje_warunki(int losowa_wartosc, int prog_odrzucenia) {
     if (losowa_wartosc < 0 || losowa_wartosc > 99) return 0;
     if (prog_odrzucenia < 0 || prog_odrzucenia > 100) return 0;
-    return (losowa_wartosc < prog_odrzucenia) ? 0 : 1;
+    if (losowa_wartosc < prog_odrzucenia) return 0;
+    return 1;
 }
 
 int serwis_klient_zgadza_sie_na_rozszerzenie(int losowa_wartosc, int prog_odmowy) {
     if (losowa_wartosc < 0 || losowa_wartosc > 99) return 0;
     if (prog_odmowy < 0 || prog_odmowy > 100) return 0;
-    return (losowa_wartosc < prog_odmowy) ? 0 : 1;
+    if (losowa_wartosc < prog_odmowy) return 0;
+    return 1;
 }
 
 int serwis_utworz_oferte(OfertaNaprawy* out, unsigned int* seed, int min_uslug, int max_uslug, int czas_dodatkowy, SerwisTrybPracy tryb) {

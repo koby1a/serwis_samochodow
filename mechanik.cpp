@@ -11,7 +11,7 @@ static SerwisTrybPracy g_tryb = SERWIS_TRYB_NORMALNY;
 static int g_zamknij_po = 0;
 
 /** @brief Handler sygnalow mechanika. */
-static void on_sig(int sig) {
+static void obsluz_sig(int sig) {
     if (sig == SIGUSR1) g_zamknij_po = 1;
     else if (sig == SIGUSR2) { if (g_tryb == SERWIS_TRYB_NORMALNY) g_tryb = SERWIS_TRYB_PRZYSPIESZONY; }
     else if (sig == SIGTERM) { if (g_tryb == SERWIS_TRYB_PRZYSPIESZONY) g_tryb = SERWIS_TRYB_NORMALNY; }
@@ -19,9 +19,9 @@ static void on_sig(int sig) {
 }
 
 /** @brief Rejestruje sygnaly. */
-static void regsig() {
+static void zarejestruj_sygnaly() {
     struct sigaction sa{};
-    sa.sa_handler = on_sig;
+    sa.sa_handler = obsluz_sig;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     if (sigaction(SIGUSR1, &sa, nullptr) == -1) perror("[mechanik] sigaction SIGUSR1");
@@ -44,7 +44,7 @@ int main(int argc, char** argv) {
 
     if (serwis_ipc_init() != SERWIS_IPC_OK) return 1;
     serwis_time_scale_set(time_scale);
-    regsig();
+    zarejestruj_sygnaly();
 
     serwis_station_set_pid(id, (int)getpid());
     serwis_logf("mechanik", "start id=%d pid=%d", id, (int)getpid());

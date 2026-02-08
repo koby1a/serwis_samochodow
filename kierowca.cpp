@@ -123,8 +123,10 @@ int main(int argc, char** argv) {
         if (t < 0) t += 1440;
         if (t >= 1440) t %= 1440;
         s.czas_przyjazdu = t;
-        s.krytyczna = (serwis_losuj_int(&seed, 0, 99) < 10) ? 1 : 0;
-        s.krytyczna_typ = s.krytyczna ? serwis_losuj_int(&seed, 1, 3) : 0;
+        s.krytyczna = 0;
+        if (serwis_losuj_int(&seed, 0, 99) < 10) s.krytyczna = 1;
+        if (s.krytyczna) s.krytyczna_typ = serwis_losuj_int(&seed, 1, 3);
+        else s.krytyczna_typ = 0;
         s.czas_naprawy = 0;
 
         if (serwis_ipc_send_zgl(s) != SERWIS_IPC_OK) break;

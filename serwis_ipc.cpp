@@ -47,7 +47,7 @@ static const long MSGT_EXT_REQ = 1;
 
 static const size_t QUEUE_RESERVE_BYTES = 1024;
 
-static int queue_free_bytes(int qid, size_t* free_out, size_t* max_out) {
+static int kolejka_wolne_bajty(int qid, size_t* free_out, size_t* max_out) {
     struct msqid_ds ds{};
     if (msgctl(qid, IPC_STAT, &ds) == -1) {
         perror("[IPC] msgctl IPC_STAT");
@@ -61,7 +61,7 @@ static int queue_free_bytes(int qid, size_t* free_out, size_t* max_out) {
     return 0;
 }
 
-static int queue_msg_count(int qid, unsigned long* out) {
+static int kolejka_liczba_msg(int qid, unsigned long* out) {
     struct msqid_ds ds{};
     if (msgctl(qid, IPC_STAT, &ds) == -1) {
         perror("[IPC] msgctl IPC_STAT");
@@ -71,15 +71,16 @@ static int queue_msg_count(int qid, unsigned long* out) {
     return 0;
 }
 
-static int wait_for_queue_space(int qid, size_t msg_size) {
+static int czekaj_na_miejsce_w_kolejce(int qid, size_t msg_size) {
     while (true) {
         size_t free_b = 0;
         size_t max_b = 0;
-        if (queue_free_bytes(qid, &free_b, &max_b) != 0) return -1;
+        if (kolejka_wolne_bajty(qid, &free_b, &max_b) != 0) return -1;
         size_t reserve = QUEUE_RESERVE_BYTES;
         if (msg_size + reserve > max_b) reserve = 0;
         if (free_b >= msg_size + reserve) return 0;
-        int scale = g_time_scale <= 0 ? 1 : g_time_scale;
+        int scale = 1;
+        if (g_time_scale > 0) scale = g_time_scale;
         long long us = 2000LL / (long long)scale;
         if (us < 0) us = 0;
         usleep((useconds_t)us);
@@ -117,14 +118,14 @@ static const char* exe_dir() {
 }
 
 /** @brief Tworzy klucz ftok na bazie katalogu exe (stabilne). */
-static key_t key_make(int id) {
+static key_t utworz_klucz(int id) {
     key_t kk = ftok(exe_dir(), id);
     if (kk == -1) perror("[IPC] ftok");
     return kk;
 }
 
 /** @brief Lock semafora (mutex). */
-static int sem_lock() {
+static int sem_zablokuj() {
     if (sem_id < 0) return -1;
 
     struct sembuf op{};
@@ -152,7 +153,7 @@ static int sem_lock() {
 }
 
 /** @brief Unlock semafora (mutex). */
-static int sem_unlock() {
+static int sem_odblokuj() {
     if (sem_id < 0) return -1;
 
     struct sembuf op{};
@@ -180,7 +181,7 @@ static int sem_unlock() {
 }
 
 /** @brief Zeruje SHM na start nowej symulacji. */
-static void shm_reset_all() {
+static void shm_resetuj() {
     if (!shm) return;
 
     shm->pozar = 0;
@@ -201,14 +202,14 @@ static void shm_reset_all() {
 
 /** @brief Inicjalizuje IPC (kolejki + shm + sem). */
 int serwis_ipc_init() {
-    key_t kz  = key_make(65);
-    key_t kzl = key_make(66);
-    key_t kr  = key_make(67);
-    key_t kk  = key_make(70);
-    key_t ke_req  = key_make(71);
-    key_t ke_resp = key_make(72);
-    key_t ksh = key_make(68);
-    key_t kse = key_make(69);
+    key_t kz  = utworz_klucz(65);
+    key_t kzl = utworz_klucz(66);
+    key_t kr  = utworz_klucz(67);
+    key_t kk  = utworz_klucz(70);
+    key_t ke_req  = utworz_klucz(71);
+    key_t ke_resp = utworz_klucz(72);
+    key_t ksh = utworz_klucz(68);
+    key_t kse = utworz_klucz(69);
     if (kz==-1 || kzl==-1 || kr==-1 || kk==-1 || ke_req==-1 || ke_resp==-1 || ksh==-1 || kse==-1) return SERWIS_IPC_ERR;
 
     g_time_scale = 10;
@@ -266,17 +267,17 @@ int serwis_ipc_init() {
     }
 
     if (shm_created) {
-        shm_reset_all();
+        shm_resetuj();
     } else {
         if (shm->pozar) {
             semun u{}; u.val = 1;
             if (semctl(sem_id, 0, SETVAL, u) == -1) perror("[IPC] semctl SETVAL");
-            shm_reset_all();
+            shm_resetuj();
         } else {
             int r;
-            while ((r = sem_lock()) == -2) {}
+            while ((r = sem_zablokuj()) == -2) {}
             if (r == 0) {
-                while ((r = sem_unlock()) == -2) {}
+                while ((r = sem_odblokuj()) == -2) {}
             }
         }
     }
@@ -310,7 +311,7 @@ void serwis_ipc_cleanup_all() {
 
 int serwis_ipc_send_zgl(const Samochod& s) {
     MsgZgl m{}; m.mtype = MSGT_ZGL_DATA; m.shutdown = 0; m.s = s;
-    if (wait_for_queue_space(q_zgl, sizeof(MsgZgl) - sizeof(long)) != 0) return SERWIS_IPC_ERR;
+    if (czekaj_na_miejsce_w_kolejce(q_zgl, sizeof(MsgZgl) - sizeof(long)) != 0) return SERWIS_IPC_ERR;
     if (msgsnd(q_zgl, &m, sizeof(MsgZgl) - sizeof(long), 0) == -1) {
         perror("[IPC] msgsnd zgl");
         return SERWIS_IPC_ERR;
@@ -320,7 +321,7 @@ int serwis_ipc_send_zgl(const Samochod& s) {
 
 int serwis_ipc_send_zgl_shutdown() {
     MsgZgl m{}; m.mtype = MSGT_ZGL_SHUTDOWN; m.shutdown = 1;
-    if (wait_for_queue_space(q_zgl, sizeof(MsgZgl) - sizeof(long)) != 0) return SERWIS_IPC_ERR;
+    if (czekaj_na_miejsce_w_kolejce(q_zgl, sizeof(MsgZgl) - sizeof(long)) != 0) return SERWIS_IPC_ERR;
     if (msgsnd(q_zgl, &m, sizeof(MsgZgl) - sizeof(long), 0) == -1) {
         perror("[IPC] msgsnd zgl_shutdown");
         return SERWIS_IPC_ERR;
@@ -350,7 +351,7 @@ int serwis_ipc_try_recv_zgl(Samochod& s) {
     MsgZgl m{};
     while (true) {
         unsigned long qnum = 0;
-        if (queue_msg_count(q_zgl, &qnum) != 0) return SERWIS_IPC_ERR;
+        if (kolejka_liczba_msg(q_zgl, &qnum) != 0) return SERWIS_IPC_ERR;
         if (qnum == 0) return SERWIS_IPC_NO_MSG;
         ssize_t r = msgrcv(q_zgl, &m, sizeof(MsgZgl) - sizeof(long), 0, 0);
         if (r >= 0) {
@@ -369,7 +370,7 @@ int serwis_ipc_try_recv_zgl(Samochod& s) {
 
 int serwis_ipc_send_zlec(const Zlecenie& z) {
     MsgZlec m{}; m.mtype = 100 + z.stanowisko_id; m.shutdown = 0; m.z = z;
-    if (wait_for_queue_space(q_zlec, sizeof(MsgZlec) - sizeof(long)) != 0) return SERWIS_IPC_ERR;
+    if (czekaj_na_miejsce_w_kolejce(q_zlec, sizeof(MsgZlec) - sizeof(long)) != 0) return SERWIS_IPC_ERR;
     if (msgsnd(q_zlec, &m, sizeof(MsgZlec) - sizeof(long), 0) == -1) {
         perror("[IPC] msgsnd zlec");
         return SERWIS_IPC_ERR;
@@ -381,7 +382,7 @@ int serwis_ipc_send_zlec_shutdown(int stanowisko_id) {
     MsgZlec m{};
     m.mtype = 100 + stanowisko_id;
     m.shutdown = 1;
-    if (wait_for_queue_space(q_zlec, sizeof(MsgZlec) - sizeof(long)) != 0) return SERWIS_IPC_ERR;
+    if (czekaj_na_miejsce_w_kolejce(q_zlec, sizeof(MsgZlec) - sizeof(long)) != 0) return SERWIS_IPC_ERR;
     if (msgsnd(q_zlec, &m, sizeof(MsgZlec) - sizeof(long), 0) == -1) {
         perror("[IPC] msgsnd zlec_shutdown");
         return SERWIS_IPC_ERR;
@@ -413,7 +414,7 @@ int serwis_ipc_try_recv_zlec(int stanowisko_id, Zlecenie& z) {
     long type = 100 + stanowisko_id;
     while (true) {
         unsigned long qnum = 0;
-        if (queue_msg_count(q_zlec, &qnum) != 0) return SERWIS_IPC_ERR;
+        if (kolejka_liczba_msg(q_zlec, &qnum) != 0) return SERWIS_IPC_ERR;
         if (qnum == 0) return SERWIS_IPC_NO_MSG;
         ssize_t r = msgrcv(q_zlec, &m, sizeof(MsgZlec) - sizeof(long), type, 0);
         if (r >= 0) {
@@ -432,7 +433,7 @@ int serwis_ipc_try_recv_zlec(int stanowisko_id, Zlecenie& z) {
 
 int serwis_ipc_send_rap(const Raport& r) {
     MsgRap m{}; m.mtype = MSGT_RAP_DATA; m.shutdown = 0; m.r = r;
-    if (wait_for_queue_space(q_rap, sizeof(MsgRap) - sizeof(long)) != 0) return SERWIS_IPC_ERR;
+    if (czekaj_na_miejsce_w_kolejce(q_rap, sizeof(MsgRap) - sizeof(long)) != 0) return SERWIS_IPC_ERR;
     if (msgsnd(q_rap, &m, sizeof(MsgRap) - sizeof(long), 0) == -1) {
         perror("[IPC] msgsnd rap");
         return SERWIS_IPC_ERR;
@@ -462,7 +463,7 @@ int serwis_ipc_try_recv_rap(Raport& r) {
     MsgRap m{};
     while (true) {
         unsigned long qnum = 0;
-        if (queue_msg_count(q_rap, &qnum) != 0) return SERWIS_IPC_ERR;
+        if (kolejka_liczba_msg(q_rap, &qnum) != 0) return SERWIS_IPC_ERR;
         if (qnum == 0) return SERWIS_IPC_NO_MSG;
         ssize_t x = msgrcv(q_rap, &m, sizeof(MsgRap) - sizeof(long), MSGT_RAP_DATA, 0);
         if (x >= 0) {
@@ -481,7 +482,7 @@ int serwis_ipc_try_recv_rap(Raport& r) {
 
 int serwis_ipc_send_kasa(const Raport& r) {
     MsgRap m{}; m.mtype = MSGT_KASA_DATA; m.shutdown = 0; m.r = r;
-    if (wait_for_queue_space(q_kasa, sizeof(MsgRap) - sizeof(long)) != 0) return SERWIS_IPC_ERR;
+    if (czekaj_na_miejsce_w_kolejce(q_kasa, sizeof(MsgRap) - sizeof(long)) != 0) return SERWIS_IPC_ERR;
     if (msgsnd(q_kasa, &m, sizeof(MsgRap) - sizeof(long), 0) == -1) {
         perror("[IPC] msgsnd kasa");
         return SERWIS_IPC_ERR;
@@ -491,7 +492,7 @@ int serwis_ipc_send_kasa(const Raport& r) {
 
 int serwis_ipc_send_kasa_shutdown() {
     MsgRap m{}; m.mtype = MSGT_KASA_SHUTDOWN; m.shutdown = 1;
-    if (wait_for_queue_space(q_kasa, sizeof(MsgRap) - sizeof(long)) != 0) return SERWIS_IPC_ERR;
+    if (czekaj_na_miejsce_w_kolejce(q_kasa, sizeof(MsgRap) - sizeof(long)) != 0) return SERWIS_IPC_ERR;
     if (msgsnd(q_kasa, &m, sizeof(MsgRap) - sizeof(long), 0) == -1) {
         perror("[IPC] msgsnd kasa_shutdown");
         return SERWIS_IPC_ERR;
@@ -519,7 +520,7 @@ int serwis_ipc_recv_kasa(Raport& r) {
 
 int serwis_ipc_send_extra_req(const SerwisExtraReq& r) {
     MsgExtReq m{}; m.mtype = MSGT_EXT_REQ; m.r = r;
-    if (wait_for_queue_space(q_ext_req, sizeof(MsgExtReq) - sizeof(long)) != 0) return SERWIS_IPC_ERR;
+    if (czekaj_na_miejsce_w_kolejce(q_ext_req, sizeof(MsgExtReq) - sizeof(long)) != 0) return SERWIS_IPC_ERR;
     if (msgsnd(q_ext_req, &m, sizeof(MsgExtReq) - sizeof(long), 0) == -1) {
         perror("[IPC] msgsnd ext_req");
         return SERWIS_IPC_ERR;
@@ -545,7 +546,7 @@ int serwis_ipc_try_recv_extra_req(SerwisExtraReq& r) {
     MsgExtReq m{};
     while (true) {
         unsigned long qnum = 0;
-        if (queue_msg_count(q_ext_req, &qnum) != 0) return SERWIS_IPC_ERR;
+        if (kolejka_liczba_msg(q_ext_req, &qnum) != 0) return SERWIS_IPC_ERR;
         if (qnum == 0) return SERWIS_IPC_NO_MSG;
         ssize_t x = msgrcv(q_ext_req, &m, sizeof(MsgExtReq) - sizeof(long), MSGT_EXT_REQ, 0);
         if (x >= 0) { r = m.r; return SERWIS_IPC_OK; }
@@ -560,7 +561,7 @@ int serwis_ipc_try_recv_extra_req(SerwisExtraReq& r) {
 
 int serwis_ipc_send_extra_resp(const SerwisExtraResp& r) {
     MsgExtResp m{}; m.mtype = 1000 + r.id_klienta; m.r = r;
-    if (wait_for_queue_space(q_ext_resp, sizeof(MsgExtResp) - sizeof(long)) != 0) return SERWIS_IPC_ERR;
+    if (czekaj_na_miejsce_w_kolejce(q_ext_resp, sizeof(MsgExtResp) - sizeof(long)) != 0) return SERWIS_IPC_ERR;
     if (msgsnd(q_ext_resp, &m, sizeof(MsgExtResp) - sizeof(long), 0) == -1) {
         perror("[IPC] msgsnd ext_resp");
         return SERWIS_IPC_ERR;
@@ -587,12 +588,12 @@ int serwis_stat_get(SerwisStatystyki& out) {
     if (!shm) return SERWIS_IPC_ERR;
 
     int r;
-    while ((r = sem_lock()) == -2) {}
+    while ((r = sem_zablokuj()) == -2) {}
     if (r != 0) return SERWIS_IPC_ERR;
 
     out = *shm;
 
-    while ((r = sem_unlock()) == -2) {}
+    while ((r = sem_odblokuj()) == -2) {}
     if (r != 0) return SERWIS_IPC_ERR;
 
     return SERWIS_IPC_OK;
@@ -601,12 +602,12 @@ int serwis_stat_get(SerwisStatystyki& out) {
 int serwis_ipc_get_queue_counts(SerwisQueueCounts& out) {
     if (q_zgl < 0 || q_zlec < 0 || q_rap < 0 || q_kasa < 0 || q_ext_req < 0 || q_ext_resp < 0)
         return SERWIS_IPC_ERR;
-    if (queue_msg_count(q_zgl, &out.zgl) != 0) return SERWIS_IPC_ERR;
-    if (queue_msg_count(q_zlec, &out.zlec) != 0) return SERWIS_IPC_ERR;
-    if (queue_msg_count(q_rap, &out.rap) != 0) return SERWIS_IPC_ERR;
-    if (queue_msg_count(q_kasa, &out.kasa) != 0) return SERWIS_IPC_ERR;
-    if (queue_msg_count(q_ext_req, &out.ext_req) != 0) return SERWIS_IPC_ERR;
-    if (queue_msg_count(q_ext_resp, &out.ext_resp) != 0) return SERWIS_IPC_ERR;
+    if (kolejka_liczba_msg(q_zgl, &out.zgl) != 0) return SERWIS_IPC_ERR;
+    if (kolejka_liczba_msg(q_zlec, &out.zlec) != 0) return SERWIS_IPC_ERR;
+    if (kolejka_liczba_msg(q_rap, &out.rap) != 0) return SERWIS_IPC_ERR;
+    if (kolejka_liczba_msg(q_kasa, &out.kasa) != 0) return SERWIS_IPC_ERR;
+    if (kolejka_liczba_msg(q_ext_req, &out.ext_req) != 0) return SERWIS_IPC_ERR;
+    if (kolejka_liczba_msg(q_ext_resp, &out.ext_resp) != 0) return SERWIS_IPC_ERR;
     return SERWIS_IPC_OK;
 }
 
@@ -614,17 +615,17 @@ void serwis_set_pozar(int v) {
     if (!shm) return;
 
     int r;
-    while ((r = sem_lock()) == -2) {}
+    while ((r = sem_zablokuj()) == -2) {}
     if (r != 0) return;
 
     if (v) {
-        shm_reset_all();
+        shm_resetuj();
         shm->pozar = 1;
     } else {
         shm->pozar = 0;
     }
 
-    while ((r = sem_unlock()) == -2) {}
+    while ((r = sem_odblokuj()) == -2) {}
     (void)r;
 }
 
@@ -632,12 +633,12 @@ int serwis_get_pozar() {
     if (!shm) return 0;
 
     int r;
-    while ((r = sem_lock()) == -2) {}
+    while ((r = sem_zablokuj()) == -2) {}
     if (r != 0) return 0;
 
     int v = shm->pozar;
 
-    while ((r = sem_unlock()) == -2) {}
+    while ((r = sem_odblokuj()) == -2) {}
     (void)r;
 
     return v;
@@ -649,12 +650,12 @@ void serwis_time_set(int minuty) {
     minuty %= 1440;
 
     int r;
-    while ((r = sem_lock()) == -2) {}
+    while ((r = sem_zablokuj()) == -2) {}
     if (r != 0) return;
 
     shm->sim_time_min = minuty;
 
-    while ((r = sem_unlock()) == -2) {}
+    while ((r = sem_odblokuj()) == -2) {}
     (void)r;
 }
 
@@ -662,12 +663,12 @@ int serwis_time_get() {
     if (!shm) return 0;
 
     int r;
-    while ((r = sem_lock()) == -2) {}
+    while ((r = sem_zablokuj()) == -2) {}
     if (r != 0) return 0;
 
     int v = shm->sim_time_min;
 
-    while ((r = sem_unlock()) == -2) {}
+    while ((r = sem_odblokuj()) == -2) {}
     (void)r;
 
     if (v < 0) v = 0;
@@ -689,16 +690,19 @@ void serwis_station_set_busy(int id, int busy, char marka, int kryt, int dodatko
     if (!shm || id < 1 || id > 8) return;
 
     int r;
-    while ((r = sem_lock()) == -2) {}
+    while ((r = sem_zablokuj()) == -2) {}
     if (r != 0) return;
 
-    shm->st[id].zajete = busy ? 1 : 0;
+    if (busy) shm->st[id].zajete = 1;
+    else shm->st[id].zajete = 0;
     shm->st[id].marka = marka;
-    shm->st[id].krytyczna = kryt ? 1 : 0;
-    shm->st[id].dodatkowe = dodatkowe ? 1 : 0;
+    if (kryt) shm->st[id].krytyczna = 1;
+    else shm->st[id].krytyczna = 0;
+    if (dodatkowe) shm->st[id].dodatkowe = 1;
+    else shm->st[id].dodatkowe = 0;
     shm->st[id].tryb = tryb;
 
-    while ((r = sem_unlock()) == -2) {}
+    while ((r = sem_odblokuj()) == -2) {}
     (void)r;
 }
 
@@ -706,12 +710,12 @@ void serwis_station_inc_done(int id) {
     if (!shm || id < 1 || id > 8) return;
 
     int r;
-    while ((r = sem_lock()) == -2) {}
+    while ((r = sem_zablokuj()) == -2) {}
     if (r != 0) return;
 
     shm->st[id].obsluzone++;
 
-    while ((r = sem_unlock()) == -2) {}
+    while ((r = sem_odblokuj()) == -2) {}
     (void)r;
 }
 
@@ -719,12 +723,13 @@ void serwis_station_set_closed(int id, int closed) {
     if (!shm || id < 1 || id > 8) return;
 
     int r;
-    while ((r = sem_lock()) == -2) {}
+    while ((r = sem_zablokuj()) == -2) {}
     if (r != 0) return;
 
-    shm->st[id].zamkniete = closed ? 1 : 0;
+    if (closed) shm->st[id].zamkniete = 1;
+    else shm->st[id].zamkniete = 0;
 
-    while ((r = sem_unlock()) == -2) {}
+    while ((r = sem_odblokuj()) == -2) {}
     (void)r;
 }
 
@@ -732,12 +737,13 @@ void serwis_req_close(int id, int v) {
     if (!shm || id < 1 || id > 8) return;
 
     int r;
-    while ((r = sem_lock()) == -2) {}
+    while ((r = sem_zablokuj()) == -2) {}
     if (r != 0) return;
 
-    shm->req_close[id] = v ? 1 : 0;
+    if (v) shm->req_close[id] = 1;
+    else shm->req_close[id] = 0;
 
-    while ((r = sem_unlock()) == -2) {}
+    while ((r = sem_odblokuj()) == -2) {}
     (void)r;
 }
 
@@ -745,12 +751,12 @@ int serwis_get_req_close(int id) {
     if (!shm || id < 1 || id > 8) return 0;
 
     int r;
-    while ((r = sem_lock()) == -2) {}
+    while ((r = sem_zablokuj()) == -2) {}
     if (r != 0) return 0;
 
     int v = shm->req_close[id];
 
-    while ((r = sem_unlock()) == -2) {}
+    while ((r = sem_odblokuj()) == -2) {}
     (void)r;
 
     return v;
@@ -760,12 +766,12 @@ void serwis_station_set_pid(int id, int pid) {
     if (!shm || id < 1 || id > 8) return;
 
     int r;
-    while ((r = sem_lock()) == -2) {}
+    while ((r = sem_zablokuj()) == -2) {}
     if (r != 0) return;
 
     shm->st[id].pid = pid;
 
-    while ((r = sem_unlock()) == -2) {}
+    while ((r = sem_odblokuj()) == -2) {}
     (void)r;
 }
 
@@ -773,12 +779,12 @@ int serwis_station_get_pid(int id) {
     if (!shm || id < 1 || id > 8) return 0;
 
     int r;
-    while ((r = sem_lock()) == -2) {}
+    while ((r = sem_zablokuj()) == -2) {}
     if (r != 0) return 0;
 
     int v = shm->st[id].pid;
 
-    while ((r = sem_unlock()) == -2) {}
+    while ((r = sem_odblokuj()) == -2) {}
     (void)r;
 
     return v;

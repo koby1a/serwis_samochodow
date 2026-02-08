@@ -53,15 +53,15 @@ static int wybierz_stanowisko(char marka, unsigned int* seed) {
     return -1;
 }
 
-static void on_worker_sig(int sig) {
+static void obsluz_sig_okienka(int sig) {
     if (sig == SIGUSR1) g_active = 0;
     else if (sig == SIGUSR2) g_active = 1;
     else if (sig == SIGINT || sig == SIGTERM) g_stop = 1;
 }
 
-static void reg_worker_sig() {
+static void zarejestruj_sig_okienka() {
     struct sigaction sa{};
-    sa.sa_handler = on_worker_sig;
+    sa.sa_handler = obsluz_sig_okienka;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     if (sigaction(SIGUSR1, &sa, nullptr) == -1) perror("[pracownik] sigaction SIGUSR1");
@@ -70,7 +70,7 @@ static void reg_worker_sig() {
     if (sigaction(SIGTERM, &sa, nullptr) == -1) perror("[pracownik] sigaction SIGTERM");
 }
 
-static int all_stations_idle(const SerwisStatystyki& st) {
+static int wszystkie_stanowiska_wolne(const SerwisStatystyki& st) {
     for (int i = 1; i <= 8; ++i) if (st.st[i].zajete) return 0;
     return 1;
 }
@@ -80,23 +80,23 @@ static int system_quiet() {
     SerwisStatystyki st{};
     if (serwis_ipc_get_queue_counts(qc) != SERWIS_IPC_OK) return 0;
     if (serwis_stat_get(st) != SERWIS_IPC_OK) return 0;
-    if (!all_stations_idle(st)) return 0;
+    if (!wszystkie_stanowiska_wolne(st)) return 0;
     if (qc.zgl || qc.zlec || qc.rap || qc.kasa || qc.ext_req || qc.ext_resp) return 0;
     return 1;
 }
 
-static int make_client_id(int& local) {
+static int utworz_id_klienta(int& local) {
     int pid = (int)getpid() & 0x7FFF;
     int id = (pid << 16) | (local & 0xFFFF);
     local++;
     return id;
 }
 
-static void worker_loop(int worker_id, int leader, int time_scale) {
+static void petla_okienka(int worker_id, int leader, int time_scale) {
     serwis_logger_set_file("raport_symulacji.log");
     if (serwis_ipc_init() != SERWIS_IPC_OK) _exit(1);
     serwis_time_scale_set(time_scale);
-    reg_worker_sig();
+    zarejestruj_sig_okienka();
 
     unsigned int seed = (unsigned int)(12345u + (unsigned int)worker_id * 777u);
     int okienka = 1;
@@ -123,7 +123,8 @@ static void worker_loop(int worker_id, int leader, int time_scale) {
             if (erc == SERWIS_IPC_NO_MSG) break;
             if (erc != SERWIS_IPC_OK) { if (serwis_get_pozar()) break; continue; }
             int los = serwis_losuj_int(&seed, 0, 99);
-            int akcept = serwis_klient_zgadza_sie_na_rozszerzenie(los, 20) ? 1 : 0;
+            int akcept = 0;
+            if (serwis_klient_zgadza_sie_na_rozszerzenie(los, 20)) akcept = 1;
             serwis_logf("pracownik", "dodatkowe id=%d st=%d czas=%d koszt=%d akcept=%d",
                         er.id_klienta, er.stanowisko_id, er.czas_dod, er.koszt_dod, akcept);
             SerwisExtraResp resp{};
@@ -198,7 +199,7 @@ static void worker_loop(int worker_id, int leader, int time_scale) {
         }
 
         Zlecenie z{};
-        z.id_klienta = make_client_id(next_client);
+        z.id_klienta = utworz_id_klienta(next_client);
         z.stanowisko_id = stid;
         z.s = s;
         z.oferta = oferta;
@@ -217,9 +218,10 @@ static void worker_loop(int worker_id, int leader, int time_scale) {
     _exit(0);
 }
 
-static void set_worker_active(pid_t pid, int active) {
+static void ustaw_okienko_aktywne(pid_t pid, int active) {
     if (pid <= 0) return;
-    int sig = active ? SIGUSR2 : SIGUSR1;
+    int sig = SIGUSR1;
+    if (active) sig = SIGUSR2;
     (void)kill(pid, sig);
 }
 
@@ -244,13 +246,13 @@ int main(int argc, char** argv) {
     for (int i = 0; i < workers; ++i) {
         pid_t pid = fork();
         if (pid == 0) {
-            worker_loop(i + 1, i == 0, time_scale);
+            petla_okienka(i + 1, i == 0, time_scale);
         }
         if (pid > 0) pids.push_back(pid);
     }
 
     int active = 1;
-    for (int i = 1; i < workers; ++i) set_worker_active(pids[i], 0);
+    for (int i = 1; i < workers; ++i) ustaw_okienko_aktywne(pids[i], 0);
 
     serwis_log("pracownik", "start parent");
 
@@ -261,12 +263,12 @@ int main(int argc, char** argv) {
             if (new_active != active) {
                 if (new_active > active) {
                     for (int i = active; i < new_active; ++i) {
-                        set_worker_active(pids[i], 1);
+                        ustaw_okienko_aktywne(pids[i], 1);
                         serwis_logf("pracownik", "okienko_open id=%d", i + 1);
                     }
                 } else {
                     for (int i = active - 1; i >= new_active; --i) {
-                        set_worker_active(pids[i], 0);
+                        ustaw_okienko_aktywne(pids[i], 0);
                         serwis_logf("pracownik", "okienko_close id=%d", i + 1);
                     }
                 }
