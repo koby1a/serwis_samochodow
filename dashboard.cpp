@@ -2,8 +2,11 @@
 
 #include <iostream>
 #include <unistd.h>
+#include <string>
+#include <cstdlib>
 #include "serwis_ipc.h"
 #include "ui.h"
+#include "time_scale.h"
 
 /** @brief Zwraca kolor dla marki. */
 static const char* marka_color(char m) {
@@ -18,14 +21,21 @@ static const char* marka_color(char m) {
     }
 }
 
-int main() {
+static int argi(int argc, char** argv, const char* k, int d) {
+    for (int i = 1; i + 1 < argc; ++i) if (std::string(argv[i]) == k) return std::atoi(argv[i + 1]);
+    return d;
+}
+
+int main(int argc, char** argv) {
     std::ios::sync_with_stdio(false);
     std::cout.setf(std::ios::unitbuf);
+    int time_scale = argi(argc, argv, "--time_scale", 10);
 
     if (serwis_ipc_init() != SERWIS_IPC_OK) {
         std::cerr << "dashboard: ipc_init error\n";
         return 1;
     }
+    serwis_time_scale_set(time_scale);
 
     ui_clear();
 
@@ -33,7 +43,7 @@ int main() {
         SerwisStatystyki s{};
         if (serwis_stat_get(s) != SERWIS_IPC_OK) {
             std::cout << "dashboard: stat_get error\n";
-            usleep((useconds_t)200000);
+            serwis_sleep_us_scaled(200000, time_scale);
             continue;
         }
 
@@ -48,6 +58,21 @@ int main() {
         std::cout << h << ":";
         if (m < 10) std::cout << "0";
         std::cout << m << ui_reset() << "\n\n";
+
+        SerwisQueueCounts qc{};
+        if (serwis_ipc_get_queue_counts(qc) == SERWIS_IPC_OK) {
+            std::cout << ui_gray() << "KOLEJKI" << ui_reset()
+                      << " | zgl=" << qc.zgl
+                      << " | zlec=" << qc.zlec
+                      << " | rap=" << qc.rap
+                      << " | kasa=" << qc.kasa
+                      << " | ext_req=" << qc.ext_req
+                      << " | ext_resp=" << qc.ext_resp
+                      << "\n\n";
+        } else {
+            std::cout << ui_gray() << "KOLEJKI" << ui_reset()
+                      << " | zgl=? | zlec=? | rap=? | kasa=? | ext_req=? | ext_resp=?\n\n";
+        }
 
         for (int id = 1; id <= 8; ++id) {
             const auto& st = s.st[id];
@@ -73,7 +98,7 @@ int main() {
         }
 
         std::cout << "\nCtrl+C / pozar zamyka symulacje.\n";
-        usleep((useconds_t)200000);
+        serwis_sleep_us_scaled(200000, time_scale);
     }
 
     serwis_ipc_detach();

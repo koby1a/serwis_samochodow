@@ -1,4 +1,6 @@
 #include <iostream>
+#include <string>
+#include <cstdlib>
 #include <csignal>
 #include <unistd.h>
 #include "serwis_ipc.h"
@@ -18,6 +20,11 @@ static int read_station_id() {
     return id;
 }
 
+static int argi(int argc, char** argv, const char* k, int d) {
+    for (int i = 1; i + 1 < argc; ++i) if (std::string(argv[i]) == k) return std::atoi(argv[i + 1]);
+    return d;
+}
+
 static void print_menu() {
     std::cout
         << "\n[kierownik] MENU\n"
@@ -33,9 +40,11 @@ static void print_menu() {
         << "wybor: ";
 }
 
-int main() {
+int main(int argc, char** argv) {
     serwis_logger_set_file("raport_symulacji.log");
     if (serwis_ipc_init() != SERWIS_IPC_OK) return 1;
+    int time_scale = argi(argc, argv, "--time_scale", 10);
+    serwis_time_scale_set(time_scale);
 
     serwis_log("kierownik", "start");
 

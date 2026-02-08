@@ -7,6 +7,11 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <csignal>
+#include <thread>
+#include <atomic>
+#include <mutex>
+#include <cerrno>
+#include "time_scale.h"
 #include "serwis_ipc.h"
 #include "logger.h"
 
@@ -30,13 +35,15 @@ static pid_t spawnp(const char* prog, const std::vector<std::string>& args) {
 }
 
 struct SimConfig {
-    int n = 200;
+    int n = 5000;
     int sleep_ms = 200;
     int seed = 2026;
     int sim_start_min = 8 * 60;
     int sim_tick_ms = 200;
     int sim_step_min = 1;
     int time_offset_range = 180;
+    int time_scale = 10;
+    int workers = 3;
     int tp = 8 * 60;
     int tk = 16 * 60;
     int t1 = 60;
@@ -63,6 +70,8 @@ static void apply_kv(SimConfig& c, const std::string& key, const std::string& va
     else if (key == "sim_tick_ms") c.sim_tick_ms = std::atoi(val.c_str());
     else if (key == "sim_step_min") c.sim_step_min = std::atoi(val.c_str());
     else if (key == "time_offset_range") c.time_offset_range = std::atoi(val.c_str());
+    else if (key == "time_scale") c.time_scale = std::atoi(val.c_str());
+    else if (key == "workers") c.workers = std::atoi(val.c_str());
     else if (key == "tp") c.tp = std::atoi(val.c_str());
     else if (key == "tk") c.tk = std::atoi(val.c_str());
     else if (key == "t1") c.t1 = std::atoi(val.c_str());
@@ -111,6 +120,8 @@ int main(int argc, char** argv) {
     cfg.sim_tick_ms = argi(argc, argv, "--sim_tick_ms", cfg.sim_tick_ms);
     cfg.sim_step_min = argi(argc, argv, "--sim_step_min", cfg.sim_step_min);
     cfg.time_offset_range = argi(argc, argv, "--time_offset_range", cfg.time_offset_range);
+    cfg.time_scale = argi(argc, argv, "--time_scale", cfg.time_scale);
+    cfg.workers = argi(argc, argv, "--workers", cfg.workers);
     cfg.tp = argi(argc, argv, "--tp", cfg.tp);
     cfg.tk = argi(argc, argv, "--tk", cfg.tk);
     cfg.t1 = argi(argc, argv, "--t1", cfg.t1);
@@ -119,6 +130,7 @@ int main(int argc, char** argv) {
     cfg.scenario = args(argc, argv, "--scenario", cfg.scenario);
 
     serwis_set_pozar(0);
+    serwis_time_scale_set(cfg.time_scale);
     serwis_time_set(cfg.sim_start_min);
     for (int i = 1; i <= 8; ++i) {
         serwis_station_set_closed(i, 0);
@@ -127,38 +139,71 @@ int main(int argc, char** argv) {
     }
 
     std::vector<pid_t> kids;
-    kids.push_back(spawnp("./dashboard", {}));
-    kids.push_back(spawnp("./kasjer", {}));
+    kids.push_back(spawnp("./dashboard", {
+        "--time_scale", std::to_string(cfg.time_scale)
+    }));
+    kids.push_back(spawnp("./kasjer", {
+        "--time_scale", std::to_string(cfg.time_scale)
+    }));
     kids.push_back(spawnp("./pracownik_serwisu", {
         "--tp", std::to_string(cfg.tp),
         "--tk", std::to_string(cfg.tk),
         "--t1", std::to_string(cfg.t1),
         "--k1", std::to_string(cfg.k1),
-        "--k2", std::to_string(cfg.k2)
+        "--k2", std::to_string(cfg.k2),
+        "--time_scale", std::to_string(cfg.time_scale),
+        "--workers", std::to_string(cfg.workers)
     }));
     for (int id = 1; id <= 8; ++id)
-        kids.push_back(spawnp("./mechanik", {"--id", std::to_string(id)}));
-    kids.push_back(spawnp("./kierownik", {}));
-    pid_t kierowca_pid = spawnp("./kierowca", {
+        kids.push_back(spawnp("./mechanik", {
+            "--id", std::to_string(id),
+            "--time_scale", std::to_string(cfg.time_scale)
+        }));
+    kids.push_back(spawnp("./kierownik", {
+        "--time_scale", std::to_string(cfg.time_scale)
+    }));
+    kids.push_back(spawnp("./kierowca", {
         "--n", std::to_string(cfg.n),
         "--sleep_ms", std::to_string(cfg.sleep_ms),
         "--seed", std::to_string(cfg.seed),
         "--time_offset_range", std::to_string(cfg.time_offset_range),
+        "--time_scale", std::to_string(cfg.time_scale),
+        "--workers", std::to_string(cfg.workers),
         "--scenario", cfg.scenario
+    }));
+
+    std::atomic<int> alive((int)kids.size());
+    std::mutex kids_mu;
+    auto mark_reaped = [&](pid_t p) {
+        std::lock_guard<std::mutex> lk(kids_mu);
+        for (pid_t& k : kids) {
+            if (k == p) {
+                k = -1;
+                alive--;
+                break;
+            }
+        }
+    };
+    std::thread reaper([&]() {
+        while (alive.load() > 0) {
+            int status = 0;
+            pid_t p = waitpid(-1, &status, 0);
+            if (p > 0) { mark_reaped(p); continue; }
+            if (p == -1) {
+                if (errno == EINTR) continue;
+                if (errno == ECHILD) break;
+            }
+        }
     });
-    kids.push_back(kierowca_pid);
 
     int sim_time = cfg.sim_start_min;
     while (true) {
-        int status;
-        pid_t p = waitpid(-1, &status, WNOHANG);
         if (g_stop) {
             serwis_set_pozar(1);
             break;
         }
         if (serwis_get_pozar()) break;
-        if (p == kierowca_pid) kierowca_pid = -1;
-        usleep((useconds_t)((long long)cfg.sim_tick_ms * 1000LL));
+        serwis_sleep_ms_scaled(cfg.sim_tick_ms, cfg.time_scale);
         sim_time += cfg.sim_step_min;
         if (sim_time >= 1440) sim_time %= 1440;
         serwis_time_set(sim_time);
@@ -168,35 +213,14 @@ int main(int argc, char** argv) {
     serwis_set_pozar(1);
     for (pid_t k : kids) if (k > 0) kill(k, SIGINT);
 
-    int alive = 0;
-    for (pid_t k : kids) if (k > 0) alive++;
+    for (int i = 0; i < 40 && alive.load() > 0; ++i)
+        serwis_sleep_us_scaled(50000, cfg.time_scale);
 
-    auto reap = [&]() {
-        int status;
-        pid_t p;
-        while ((p = waitpid(-1, &status, WNOHANG)) > 0) {
-            for (pid_t& k : kids) {
-                if (k == p) {
-                    k = -1;
-                    alive--;
-                    break;
-                }
-            }
-        }
-    };
-
-    for (int i = 0; i < 40 && alive > 0; ++i) {
-        reap();
-        usleep((useconds_t)50000);
-    }
-
-    if (alive > 0) {
+    if (alive.load() > 0) {
         for (pid_t k : kids) if (k > 0) kill(k, SIGKILL);
-        for (int i = 0; i < 20 && alive > 0; ++i) {
-            reap();
-            usleep((useconds_t)50000);
-        }
     }
+
+    if (reaper.joinable()) reaper.join();
 
     serwis_ipc_cleanup_all();
     return 0;

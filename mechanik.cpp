@@ -5,6 +5,7 @@
 #include "serwis_ipc.h"
 #include "model.h"
 #include "logger.h"
+#include "time_scale.h"
 
 static SerwisTrybPracy g_tryb = SERWIS_TRYB_NORMALNY;
 static int g_zamknij_po = 0;
@@ -38,9 +39,11 @@ static int argi(int argc, char** argv, const char* k, int d) {
 int main(int argc, char** argv) {
     serwis_logger_set_file("raport_symulacji.log");
     int id = argi(argc, argv, "--id", 1);
+    int time_scale = argi(argc, argv, "--time_scale", 10);
     if (id < 1 || id > 8) return 1;
 
     if (serwis_ipc_init() != SERWIS_IPC_OK) return 1;
+    serwis_time_scale_set(time_scale);
     regsig();
 
     serwis_station_set_pid(id, (int)getpid());
@@ -58,11 +61,8 @@ int main(int argc, char** argv) {
         }
 
         Zlecenie z{};
-        int rz = serwis_ipc_try_recv_zlec(id, z);
-        if (rz == SERWIS_IPC_NO_MSG) {
-            usleep((useconds_t)20000);
-            continue;
-        }
+        int rz = serwis_ipc_recv_zlec(id, z);
+        if (rz == SERWIS_IPC_SHUTDOWN) break;
         if (rz != SERWIS_IPC_OK) {
             if (serwis_get_pozar()) break;
             continue;
@@ -104,7 +104,7 @@ int main(int argc, char** argv) {
         int czas = serwis_oblicz_czas_naprawy(z.oferta.czas, czas_dod, g_tryb);
         int koszt = z.oferta.koszt + koszt_dod;
 
-        usleep((useconds_t)((long long)czas * 1000LL));
+        serwis_sleep_ms_scaled(czas, time_scale);
 
         Raport r{};
         r.id_klienta = z.id_klienta;

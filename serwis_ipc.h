@@ -6,6 +6,7 @@
 #define SERWIS_IPC_OK     0
 #define SERWIS_IPC_ERR    1
 #define SERWIS_IPC_NO_MSG 2
+#define SERWIS_IPC_SHUTDOWN 3
 
 /** @brief Widok stanowiska do dashboardu (SHM). */
 struct SerwisStationView {
@@ -41,6 +42,16 @@ struct SerwisExtraResp {
     int akceptacja; // 0/1
 };
 
+/** @brief Liczniki kolejek komunikatow. */
+struct SerwisQueueCounts {
+    unsigned long zgl;
+    unsigned long zlec;
+    unsigned long rap;
+    unsigned long kasa;
+    unsigned long ext_req;
+    unsigned long ext_resp;
+};
+
 /** @brief Inicjalizuje IPC (kolejki + shm + sem). */
 int serwis_ipc_init();
 
@@ -52,6 +63,8 @@ void serwis_ipc_cleanup_all();
 
 /** @brief Wysyla zgloszenie samochodu do pracownika. */
 int serwis_ipc_send_zgl(const Samochod& s);
+/** @brief Wysyla komunikat zakonczenia do pracownika (brak dalszych zgloszen). */
+int serwis_ipc_send_zgl_shutdown();
 
 /** @brief Odbiera zgloszenie samochodu (blokujaco, odporne na EINTR). */
 int serwis_ipc_recv_zgl(Samochod& s);
@@ -61,6 +74,8 @@ int serwis_ipc_try_recv_zgl(Samochod& s);
 
 /** @brief Wysyla zlecenie do mechanika (mtype = 100 + stanowisko_id). */
 int serwis_ipc_send_zlec(const Zlecenie& z);
+/** @brief Wysyla komunikat zakonczenia do mechanika (mtype = 100 + stanowisko_id). */
+int serwis_ipc_send_zlec_shutdown(int stanowisko_id);
 
 /** @brief Odbiera zlecenie dla stanowiska (blokujaco, odporne na EINTR). */
 int serwis_ipc_recv_zlec(int stanowisko_id, Zlecenie& z);
@@ -78,6 +93,8 @@ int serwis_ipc_try_recv_rap(Raport& r);
 
 /** @brief Wysyla raport do kasy. */
 int serwis_ipc_send_kasa(const Raport& r);
+/** @brief Wysyla komunikat zakonczenia do kasy. */
+int serwis_ipc_send_kasa_shutdown();
 
 /** @brief Odbiera raport w kasie (blokujaco). */
 int serwis_ipc_recv_kasa(Raport& r);
@@ -100,6 +117,9 @@ int serwis_ipc_recv_extra_resp(int id_klienta, SerwisExtraResp& r);
 /** @brief Pobiera kopie statystyk z SHM. */
 int serwis_stat_get(SerwisStatystyki& out);
 
+/** @brief Pobiera licznik komunikatow w kolejkach (msg_qnum). */
+int serwis_ipc_get_queue_counts(SerwisQueueCounts& out);
+
 /** @brief Ustawia flage pozaru. */
 void serwis_set_pozar(int v);
 
@@ -111,6 +131,12 @@ void serwis_time_set(int minuty);
 
 /** @brief Pobiera czas symulacji (minuty 0..1439). */
 int serwis_time_get();
+
+/** @brief Ustawia globalny mnoznik czasu (>=1). */
+void serwis_time_scale_set(int scale);
+
+/** @brief Pobiera globalny mnoznik czasu (>=1). */
+int serwis_time_scale_get();
 
 /** @brief Aktualizuje widok stanowiska. */
 void serwis_station_set_busy(int id, int busy, char marka, int kryt, int dodatkowe, int tryb);

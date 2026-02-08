@@ -1,8 +1,13 @@
 #include <string>
+#include <vector>
+#include <csignal>
+#include <cstdlib>
 #include <unistd.h>
+#include <sys/wait.h>
 #include "serwis_ipc.h"
 #include "model.h"
 #include "logger.h"
+#include "time_scale.h"
 
 static int TP = 8 * 60;
 static int TK = 16 * 60;
@@ -10,6 +15,9 @@ static int T1 = 60;
 static int K1 = 3;
 static int K2 = 5;
 static const int KRIT_SERVICES[3] = {11, 29, 8};
+
+static volatile sig_atomic_t g_active = 1;
+static volatile sig_atomic_t g_stop = 0;
 
 /** @brief Pobiera int z argv. */
 static int argi(int argc, char** argv, const char* k, int d) {
@@ -45,29 +53,64 @@ static int wybierz_stanowisko(char marka, unsigned int* seed) {
     return -1;
 }
 
-/** @brief Proces pracownika: rejestracja, oferta, wybor stanowiska, obsluga raportow. */
-int main(int argc, char** argv) {
+static void on_worker_sig(int sig) {
+    if (sig == SIGUSR1) g_active = 0;
+    else if (sig == SIGUSR2) g_active = 1;
+    else if (sig == SIGINT || sig == SIGTERM) g_stop = 1;
+}
+
+static void reg_worker_sig() {
+    struct sigaction sa{};
+    sa.sa_handler = on_worker_sig;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    if (sigaction(SIGUSR1, &sa, nullptr) == -1) perror("[pracownik] sigaction SIGUSR1");
+    if (sigaction(SIGUSR2, &sa, nullptr) == -1) perror("[pracownik] sigaction SIGUSR2");
+    if (sigaction(SIGINT, &sa, nullptr) == -1) perror("[pracownik] sigaction SIGINT");
+    if (sigaction(SIGTERM, &sa, nullptr) == -1) perror("[pracownik] sigaction SIGTERM");
+}
+
+static int all_stations_idle(const SerwisStatystyki& st) {
+    for (int i = 1; i <= 8; ++i) if (st.st[i].zajete) return 0;
+    return 1;
+}
+
+static int system_quiet() {
+    SerwisQueueCounts qc{};
+    SerwisStatystyki st{};
+    if (serwis_ipc_get_queue_counts(qc) != SERWIS_IPC_OK) return 0;
+    if (serwis_stat_get(st) != SERWIS_IPC_OK) return 0;
+    if (!all_stations_idle(st)) return 0;
+    if (qc.zgl || qc.zlec || qc.rap || qc.kasa || qc.ext_req || qc.ext_resp) return 0;
+    return 1;
+}
+
+static int make_client_id(int& local) {
+    int pid = (int)getpid() & 0x7FFF;
+    int id = (pid << 16) | (local & 0xFFFF);
+    local++;
+    return id;
+}
+
+static void worker_loop(int worker_id, int leader, int time_scale) {
     serwis_logger_set_file("raport_symulacji.log");
-    if (serwis_ipc_init() != SERWIS_IPC_OK) return 1;
+    if (serwis_ipc_init() != SERWIS_IPC_OK) _exit(1);
+    serwis_time_scale_set(time_scale);
+    reg_worker_sig();
 
-    TP = argi(argc, argv, "--tp", TP);
-    TK = argi(argc, argv, "--tk", TK);
-    T1 = argi(argc, argv, "--t1", T1);
-    K1 = argi(argc, argv, "--k1", K1);
-    K2 = argi(argc, argv, "--k2", K2);
-
-    unsigned int seed = 12345u;
+    unsigned int seed = (unsigned int)(12345u + (unsigned int)worker_id * 777u);
     int okienka = 1;
-    int kolejka = 0;
     int next_client = 1;
+    int zgl_done = 0;
 
-    serwis_log("pracownik", "start");
+    serwis_logf("pracownik", "start worker=%d leader=%d", worker_id, leader);
 
-    while (!serwis_get_pozar()) {
+    while (!serwis_get_pozar() && !g_stop) {
         while (true) {
             Raport r{};
             int rr = serwis_ipc_try_recv_rap(r);
             if (rr == SERWIS_IPC_NO_MSG) break;
+            if (rr == SERWIS_IPC_SHUTDOWN) break;
             if (rr != SERWIS_IPC_OK) { if (serwis_get_pozar()) break; continue; }
             serwis_logf("pracownik", "odbior_formularza id=%d st=%d koszt=%d czas=%d",
                         r.id_klienta, r.stanowisko_id, r.koszt, r.czas);
@@ -89,10 +132,25 @@ int main(int argc, char** argv) {
             (void)serwis_ipc_send_extra_resp(resp);
         }
 
+        if (!g_active) {
+            serwis_sleep_us_scaled(50000, time_scale);
+            continue;
+        }
+
         Samochod s{};
         int zr = serwis_ipc_try_recv_zgl(s);
-        if (zr == SERWIS_IPC_NO_MSG) {
-            usleep((useconds_t)50000);
+        if (zr == SERWIS_IPC_SHUTDOWN) {
+            if (leader) zgl_done = 1;
+            else break;
+        } else if (zr == SERWIS_IPC_NO_MSG) {
+            if (leader && zgl_done) {
+                if (system_quiet()) {
+                    for (int id = 1; id <= 8; ++id) (void)serwis_ipc_send_zlec_shutdown(id);
+                    (void)serwis_ipc_send_kasa_shutdown();
+                    break;
+                }
+            }
+            serwis_sleep_us_scaled(50000, time_scale);
             continue;
         }
         if (zr != SERWIS_IPC_OK) {
@@ -100,25 +158,24 @@ int main(int argc, char** argv) {
             continue;
         }
 
-        kolejka++;
-        okienka = serwis_aktualizuj_okienka(okienka, kolejka, K1, K2);
+        SerwisQueueCounts qc{};
+        if (serwis_ipc_get_queue_counts(qc) == SERWIS_IPC_OK) {
+            okienka = serwis_aktualizuj_okienka(okienka, (int)qc.zgl, K1, K2);
+        }
 
         if (!serwis_czy_moze_czekac_poza_godzinami(TP, TK, T1, s)) {
             serwis_logf("pracownik", "odrzut poza_godzinami marka=%c t=%d kryt=%d typ=%d",
                         s.marka, s.czas_przyjazdu, s.krytyczna, s.krytyczna_typ);
-            kolejka--;
             continue;
         }
 
         if (!serwis_czy_marka_obslugiwana(s.marka)) {
             serwis_logf("pracownik", "odrzut nieobslugiwana marka=%c", s.marka);
-            kolejka--;
             continue;
         }
 
         OfertaNaprawy oferta{};
         if (!serwis_utworz_oferte(&oferta, &seed, 2, 5, 0, SERWIS_TRYB_NORMALNY)) {
-            kolejka--;
             continue;
         }
         if (s.krytyczna && s.krytyczna_typ >= 1 && s.krytyczna_typ <= 3) {
@@ -131,19 +188,17 @@ int main(int argc, char** argv) {
         int los = serwis_losuj_int(&seed, 0, 99);
         if (!serwis_klient_akceptuje_warunki(los, 2)) {
             serwis_logf("pracownik", "odrzut oferty los=%d", los);
-            kolejka--;
             continue;
         }
 
         int stid = wybierz_stanowisko(s.marka, &seed);
         if (stid == -1) {
             serwis_log("pracownik", "brak stanowiska -> odrzut");
-            kolejka--;
             continue;
         }
 
         Zlecenie z{};
-        z.id_klienta = next_client++;
+        z.id_klienta = make_client_id(next_client);
         z.stanowisko_id = stid;
         z.s = s;
         z.oferta = oferta;
@@ -155,11 +210,89 @@ int main(int argc, char** argv) {
         if (serwis_ipc_send_zlec(z) != SERWIS_IPC_OK) {
             if (serwis_get_pozar()) break;
         }
-
-        kolejka--;
     }
 
-    serwis_log("pracownik", "koniec");
+    serwis_logf("pracownik", "koniec worker=%d", worker_id);
+    serwis_ipc_detach();
+    _exit(0);
+}
+
+static void set_worker_active(pid_t pid, int active) {
+    if (pid <= 0) return;
+    int sig = active ? SIGUSR2 : SIGUSR1;
+    (void)kill(pid, sig);
+}
+
+/** @brief Proces pracownika: rejestracja, oferta, wybor stanowiska, obsluga raportow. */
+int main(int argc, char** argv) {
+    serwis_logger_set_file("raport_symulacji.log");
+    if (serwis_ipc_init() != SERWIS_IPC_OK) return 1;
+
+    TP = argi(argc, argv, "--tp", TP);
+    TK = argi(argc, argv, "--tk", TK);
+    T1 = argi(argc, argv, "--t1", T1);
+    K1 = argi(argc, argv, "--k1", K1);
+    K2 = argi(argc, argv, "--k2", K2);
+    int time_scale = argi(argc, argv, "--time_scale", 10);
+    int workers = argi(argc, argv, "--workers", 3);
+    if (workers < 1) workers = 1;
+    if (workers > 3) workers = 3;
+    serwis_time_scale_set(time_scale);
+
+    std::vector<pid_t> pids;
+    pids.reserve((size_t)workers);
+    for (int i = 0; i < workers; ++i) {
+        pid_t pid = fork();
+        if (pid == 0) {
+            worker_loop(i + 1, i == 0, time_scale);
+        }
+        if (pid > 0) pids.push_back(pid);
+    }
+
+    int active = 1;
+    for (int i = 1; i < workers; ++i) set_worker_active(pids[i], 0);
+
+    serwis_log("pracownik", "start parent");
+
+    while (!serwis_get_pozar()) {
+        SerwisQueueCounts qc{};
+        if (serwis_ipc_get_queue_counts(qc) == SERWIS_IPC_OK) {
+            int new_active = serwis_aktualizuj_okienka(active, (int)qc.zgl, K1, K2);
+            if (new_active != active) {
+                if (new_active > active) {
+                    for (int i = active; i < new_active; ++i) {
+                        set_worker_active(pids[i], 1);
+                        serwis_logf("pracownik", "okienko_open id=%d", i + 1);
+                    }
+                } else {
+                    for (int i = active - 1; i >= new_active; --i) {
+                        set_worker_active(pids[i], 0);
+                        serwis_logf("pracownik", "okienko_close id=%d", i + 1);
+                    }
+                }
+                active = new_active;
+            }
+        }
+
+        int status = 0;
+        pid_t p;
+        while ((p = waitpid(-1, &status, WNOHANG)) > 0) {
+            for (size_t i = 0; i < pids.size(); ++i) {
+                if (pids[i] == p) pids[i] = -1;
+            }
+        }
+
+        bool any_alive = false;
+        for (pid_t pid : pids) if (pid > 0) any_alive = true;
+        if (!any_alive) break;
+
+        serwis_sleep_us_scaled(50000, time_scale);
+    }
+
+    for (pid_t pid : pids) if (pid > 0) kill(pid, SIGINT);
+    for (pid_t pid : pids) if (pid > 0) waitpid(pid, nullptr, 0);
+
+    serwis_log("pracownik", "koniec parent");
     serwis_ipc_detach();
     return 0;
 }

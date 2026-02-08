@@ -5,6 +5,7 @@
 #include "serwis_ipc.h"
 #include "model.h"
 #include "logger.h"
+#include "time_scale.h"
 
 /**
  * @brief Pobiera int z argv.
@@ -26,6 +27,9 @@ int main(int argc, char** argv) {
     int n = argi(argc, argv, "--n", 200);
     int sleep_ms = argi(argc, argv, "--sleep_ms", 5);
     int time_offset_range = argi(argc, argv, "--time_offset_range", 180);
+    int time_scale = argi(argc, argv, "--time_scale", 10);
+    int workers = argi(argc, argv, "--workers", 3);
+    serwis_time_scale_set(time_scale);
     unsigned int seed = (unsigned int)argi(argc, argv, "--seed", 2026);
     std::string scenario = args(argc, argv, "--scenario", "default");
 
@@ -55,7 +59,7 @@ int main(int argc, char** argv) {
     int sent = 0;
     for (size_t i = 0; i < fixed.size() && sent < n && !serwis_get_pozar(); ++i, ++sent) {
         if (serwis_ipc_send_zgl(fixed[i]) != SERWIS_IPC_OK) break;
-        usleep((useconds_t)((long long)sleep_ms * 1000LL));
+        serwis_sleep_ms_scaled(sleep_ms, time_scale);
     }
 
     for (; sent < n && !serwis_get_pozar(); ++sent) {
@@ -72,7 +76,12 @@ int main(int argc, char** argv) {
         s.czas_naprawy = 0;
 
         if (serwis_ipc_send_zgl(s) != SERWIS_IPC_OK) break;
-        usleep((useconds_t)((long long)sleep_ms * 1000LL));
+        serwis_sleep_ms_scaled(sleep_ms, time_scale);
+    }
+
+    if (!serwis_get_pozar()) {
+        if (workers < 1) workers = 1;
+        for (int i = 0; i < workers; ++i) (void)serwis_ipc_send_zgl_shutdown();
     }
 
     serwis_log("kierowca", "koniec");
