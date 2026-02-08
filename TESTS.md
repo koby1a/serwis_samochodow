@@ -11,7 +11,7 @@ cmake --build cmake-build-debug -j
 
 2) Uruchom symulację z konfiguracją:
 ```
-./serwis_samochodow --config configs/TX.cfg
+./serwis_samochodow --config ../configs/TX.cfg
 ```
 
 3) Sprawdź logi w `raport_symulacji.log` oraz dashboard.
@@ -20,7 +20,7 @@ cmake --build cmake-build-debug -j
 
 Start:
 ```
-./serwis_samochodow --config configs/T1.cfg
+./serwis_samochodow --config ../configs/T1.cfg
 ```
 
 Weryfikacja:
@@ -32,7 +32,7 @@ Weryfikacja:
 
 Start:
 ```
-./serwis_samochodow --config configs/T2.cfg
+./serwis_samochodow --config ../configs/T2.cfg
 ```
 
 Weryfikacja:
@@ -44,7 +44,7 @@ Weryfikacja:
 
 Start:
 ```
-./serwis_samochodow --config configs/T3.cfg
+./serwis_samochodow --config ../configs/T3.cfg
 ```
 
 Weryfikacja:
@@ -58,7 +58,7 @@ Weryfikacja:
 
 Start:
 ```
-./serwis_samochodow --config configs/T4.cfg
+./serwis_samochodow --config ../configs/T4.cfg
 ```
 
 W trakcie działania w oknie `kierownik`:
@@ -76,7 +76,7 @@ Weryfikacja:
 
 Start:
 ```
-./serwis_samochodow --config configs/T5.cfg
+./serwis_samochodow --config ../configs/T5.cfg
 ```
 
 W trakcie działania w oknie `kierownik`:
