@@ -133,72 +133,67 @@ Poniżej opis testów, które będą zrealizowane i opisane w raporcie.
 
 ---
 
-### Test T1 – Obsługa marek i przydział na stanowiska
+### Test T1 – 2000 samochodów tylko marki A
 
 **Cel:**  
-Sprawdzenie, czy serwis:
-
-- przyjmuje tylko marki **A/E/I/O/U/Y**,
-- odrzuca inne marki (B, C, D, …),
-- poprawnie wykorzystuje stanowisko 8 (tylko U/Y).
+Sprawdzenie dużej liczby klientów jednej marki oraz poprawnego przydziału na stanowiska 1–7.
 
 **Wejście:**
 
 - Serwis otwarty.
-- Przyjazdy samochodów:
-    - kilka marek: A, E, I, O, U, Y,
-    - kilka marek: B, C, Z,
-    - co najmniej 3 pojazdy marki U i 3 marki Y.
+- Generacja **2000** samochodów wyłącznie marki **A** (scenariusz `A_ONLY`).
 
 **Oczekiwany wynik:**
 
-- marki spoza listy są odrzucane przy rejestracji (wpis w logu),
-- obsługiwane marki trafiają wyłącznie na dozwolone stanowiska,
-- stanowisko 8 nie obsługuje żadnej marki poza U/Y,
+- brak odrzuceń z powodu nieobsługiwanej marki,
+- brak przydziału na stanowisko 8,
+- rozkład napraw na stanowiskach 1–7,
 - brak zakleszczeń, poprawne zakończenie symulacji.
 
 ---
 
-### Test T2 – Kolejki i dynamiczne otwieranie stanowisk obsługi klienta
+### Test T2 – Kolejki i dynamiczne otwieranie okienek (burst)
 
 **Cel:**  
-Sprawdzenie progów **K1** i **K2** przy otwieraniu/zamykaniu stanowisk.
+Sprawdzenie progów **K1** i **K2** przy otwieraniu/zamykaniu okienek obsługi.
 
 **Wejście:**
 
 - Serwis otwarty, parametry: `K1 = 3`, `K2 = 5`.
-- Seria przyjazdów powodująca kolejkę o długości 1–7.
+- Seria „burstów” przyjazdów: **4**, **10**, **2**, **7**, **1**, **6** (scenariusz `BURST_K1K2`).
 
 **Oczekiwany wynik:**
 
-- po przekroczeniu **K1** otwiera się 2. stanowisko; zamyka się, gdy kolejka ≤2,
-- po przekroczeniu **K2** otwiera się 3. stanowisko; zamyka się, gdy kolejka ≤3,
-- zawsze działa co najmniej jedno stanowisko,
-- zdarzenia otwarcia/zamknięcia są zapisane w logu.
+- po przekroczeniu **K1** otwiera się 2. okienko; zamyka się, gdy kolejka ≤2,
+- po przekroczeniu **K2** otwiera się 3. okienko; zamyka się, gdy kolejka ≤3,
+- zawsze działa co najmniej jedno okienko,
+- zdarzenia otwarcia/zamknięcia są zapisane w logu (`okienko_open` / `okienko_close`).
 
 ---
 
-### Test T3 – Klienci przed godzinami otwarcia i usterki krytyczne
+### Test T3 – Bramka czasu + usterki krytyczne (deterministyczne)
 
 **Cel:**  
-Sprawdzenie zachowania systemu dla klientów przyjeżdżających **przed Tp**.
+Sprawdzenie warunków dopuszczenia klientów przed/po godzinach pracy w sposób deterministyczny.
 
 **Wejście:**
 
-- Godziny pracy: np. `Tp = 8:00`, `Tk = 16:00`,
+- Godziny pracy: `Tp = 8:00`, `Tk = 16:00`,
 - `T1 = 30` minut,
-- zdefiniowane ≥3 typy usterek krytycznych (np. awaria hamulców, układu kierowniczego, krytyczne wycieki),
-- kilku kierowców przybywa przed otwarciem:
-    - część z usterkami krytycznymi,
-    - część z niekrytycznymi i różnym czasem do otwarcia (mniejszym/większym niż T1).
+- scenariusz `TIME_GATES` z ustalonymi czasami przyjazdu:
+    - 7:30 (do otwarcia = 30) – niekrytyczny,
+    - 7:40 (do otwarcia = 20) – niekrytyczny,
+    - 6:40 – krytyczny,
+    - 16:10 – niekrytyczny,
+    - 16:30 – krytyczny.
 
 **Oczekiwany wynik:**
 
-- do kolejki przed otwarciem dopuszczani są:
-    - wszyscy z usterkami krytycznymi,
-    - klienci, dla których czas do Tp jest < T1,
-- pozostali są odrzucani,
-- po otwarciu serwisu oczekujący są obsługiwani,
+- 7:30 niekrytyczny → odrzucony (do otwarcia = T1),
+- 7:40 niekrytyczny → przyjęty (do otwarcia < T1),
+- krytyczny przed otwarciem → przyjęty,
+- po zamknięciu niekrytyczny → odrzucony,
+- po zamknięciu krytyczny → przyjęty,
 - zachowanie odnotowane w logach.
 
 ---

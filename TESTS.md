@@ -16,7 +16,7 @@ cmake --build cmake-build-debug -j
 
 3) Sprawdź logi w `raport_symulacji.log` oraz dashboard.
 
-## T1 – Obsługa marek i przydział na stanowiska
+## T1 – 2000 samochodów tylko marki A
 
 Start:
 ```
@@ -24,11 +24,11 @@ Start:
 ```
 
 Weryfikacja:
-- logi odrzuceń marek spoza A/E/I/O/U/Y,
-- przydział marek U/Y do stanowiska 8,
-- brak obsługi innych marek na stanowisku 8.
+- brak odrzuceń z powodu nieobsługiwanej marki,
+- brak przydziału na stanowisko 8 (bo tylko A),
+- rozkład na stanowiska 1–7.
 
-## T2 – Kolejki i dynamiczne otwieranie okienek
+## T2 – Kolejki i dynamiczne otwieranie okienek (burst)
 
 Start:
 ```
@@ -36,10 +36,11 @@ Start:
 ```
 
 Weryfikacja:
-- w logach zmiany liczby okienek przy K1/K2,
-- brak zejścia poniżej 1 aktywnego okienka.
+- w logach pojawiają się wpisy `okienko_open` oraz `okienko_close`,
+- po burstach 4 i 10 kierowców następuje otwarcie 2. i 3. okienka,
+- po spadku kolejki zamknięcie okienek zgodnie z progami (≤2 i ≤3).
 
-## T3 – Klienci przed godzinami otwarcia i usterki krytyczne
+## T3 – Bramka czasu + usterki krytyczne (deterministyczne)
 
 Start:
 ```
@@ -47,8 +48,11 @@ Start:
 ```
 
 Weryfikacja:
-- odrzucenia klientów przed Tp, gdy nie są krytyczni i do otwarcia >= T1,
-- przyjęcia krytycznych oraz tych z czasem do otwarcia < T1.
+- klient z czasem 7:30 (do otwarcia = 30) jest odrzucony,
+- klient z czasem 7:40 (do otwarcia = 20) jest przyjęty,
+- klient krytyczny przed otwarciem jest przyjęty,
+- klient po zamknięciu bez krytycznej jest odrzucony,
+- klient po zamknięciu z krytyczną jest przyjęty.
 
 ## T4 – Sygnały 1–3 (kierownik)
 
