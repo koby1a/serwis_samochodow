@@ -19,10 +19,14 @@ static inline void serwis_sleep_us_scaled(long long us, int scale) {
     int s = serwis_time_scale_effective(scale);
     long long scaled = us / s;
     if (scaled < 0) scaled = 0;
+    //(void) us;
+    //(void) scale;
     usleep((useconds_t)scaled);
 }
 
 static inline void serwis_sleep_ms_scaled(long long ms, int scale) {
+    //(void) ms;
+    //(void) scale;
     serwis_sleep_us_scaled(ms * 1000LL, scale);
 }
 
