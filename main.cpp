@@ -139,11 +139,13 @@ int main(int argc, char** argv) {
     }
 
     std::vector<pid_t> kids;
+    pid_t pid_kierowca = -1;
     kids.push_back(uruchom_program("./dashboard", {
         "--time_scale", std::to_string(cfg.time_scale)
     }));
     kids.push_back(uruchom_program("./kasjer", {
-        "--time_scale", std::to_string(cfg.time_scale)
+        "--time_scale", std::to_string(cfg.time_scale),
+        "--scenario", cfg.scenario
     }));
     kids.push_back(uruchom_program("./pracownik_serwisu", {
         "--tp", std::to_string(cfg.tp),
@@ -152,17 +154,19 @@ int main(int argc, char** argv) {
         "--k1", std::to_string(cfg.k1),
         "--k2", std::to_string(cfg.k2),
         "--time_scale", std::to_string(cfg.time_scale),
-        "--workers", std::to_string(cfg.workers)
+        "--workers", std::to_string(cfg.workers),
+        "--scenario", cfg.scenario
     }));
     for (int id = 1; id <= 8; ++id)
         kids.push_back(uruchom_program("./mechanik", {
             "--id", std::to_string(id),
-            "--time_scale", std::to_string(cfg.time_scale)
+            "--time_scale", std::to_string(cfg.time_scale),
+            "--scenario", cfg.scenario
         }));
     kids.push_back(uruchom_program("./kierownik", {
         "--time_scale", std::to_string(cfg.time_scale)
     }));
-    kids.push_back(uruchom_program("./kierowca", {
+    pid_kierowca = uruchom_program("./kierowca", {
         "--n", std::to_string(cfg.n),
         "--sleep_ms", std::to_string(cfg.sleep_ms),
         "--seed", std::to_string(cfg.seed),
@@ -170,9 +174,11 @@ int main(int argc, char** argv) {
         "--time_scale", std::to_string(cfg.time_scale),
         "--workers", std::to_string(cfg.workers),
         "--scenario", cfg.scenario
-    }));
+    });
+    kids.push_back(pid_kierowca);
 
     std::atomic<int> alive((int)kids.size());
+    std::atomic<int> kierowca_alive(1);
     std::mutex kids_mu;
     auto mark_reaped = [&](pid_t p) {
         std::lock_guard<std::mutex> lk(kids_mu);
@@ -180,6 +186,7 @@ int main(int argc, char** argv) {
             if (k == p) {
                 k = -1;
                 alive--;
+                if (p == pid_kierowca) kierowca_alive.store(0);
                 break;
             }
         }
@@ -213,8 +220,18 @@ int main(int argc, char** argv) {
     serwis_set_pozar(1);
     for (pid_t k : kids) if (k > 0) kill(k, SIGINT);
 
-    for (int i = 0; i < 40 && alive.load() > 0; ++i)
-        serwis_sleep_us_scaled(50000, cfg.time_scale);
+    // Najpierw poczekaj, az kierowca posprzata swoje dzieci (bez tego IPC moze zostac uzyte po cleanupie).
+    if (pid_kierowca > 0) {
+        for (int i = 0; i < 300; ++i) { // do ~30s
+            if (kierowca_alive.load() == 0) break;
+            usleep(100000);
+        }
+    }
+    // Daj pozostalych czas na czyste wyjscie.
+    for (int i = 0; i < 600 && alive.load() > 0; ++i) {
+        usleep(100000); // 0.1s, lacznie do ~60s
+        if (g_stop && kierowca_alive.load() == 0 && alive.load() == 0) break;
+    }
 
     if (alive.load() > 0) {
         for (pid_t k : kids) if (k > 0) kill(k, SIGKILL);

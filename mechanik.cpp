@@ -36,10 +36,16 @@ static int argi(int argc, char** argv, const char* k, int d) {
     return d;
 }
 
+static std::string args(int argc, char** argv, const char* k, const std::string& d) {
+    for (int i = 1; i + 1 < argc; ++i) if (std::string(argv[i]) == k) return argv[i + 1];
+    return d;
+}
+
 int main(int argc, char** argv) {
     serwis_logger_set_file("raport_symulacji.log");
     int id = argi(argc, argv, "--id", 1);
     int time_scale = argi(argc, argv, "--time_scale", 10);
+    std::string scenario = args(argc, argv, "--scenario", "");
     if (id < 1 || id > 8) return 1;
 
     if (serwis_ipc_init() != SERWIS_IPC_OK) return 1;
@@ -77,7 +83,7 @@ int main(int argc, char** argv) {
         int czas_dod = 0;
         int koszt_dod = 0;
 
-        if (serwis_losuj_int(&seed, 0, 99) < 20) {
+        if (scenario == "T4" || (scenario != "T3" && serwis_losuj_int(&seed, 0, 99) < 20)) {
             int proponowany_czas = serwis_losuj_int(&seed, 10, 60);
             int proponowany_koszt = serwis_losuj_int(&seed, 100, 500);
 
@@ -102,6 +108,7 @@ int main(int argc, char** argv) {
         serwis_station_set_busy(id, 1, z.s.marka, z.s.krytyczna, dodatkowe, (int)g_tryb);
 
         int czas = serwis_oblicz_czas_naprawy(z.oferta.czas, czas_dod, g_tryb);
+        if (scenario == "T3") czas = 1; // maksymalny przeplyw raportow/kasy
         int koszt = z.oferta.koszt + koszt_dod;
 
         serwis_sleep_ms_scaled(czas, time_scale);

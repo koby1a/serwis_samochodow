@@ -18,10 +18,16 @@ static const int KRIT_SERVICES[3] = {11, 29, 8};
 
 static volatile sig_atomic_t g_active = 1;
 static volatile sig_atomic_t g_stop = 0;
+static std::string g_scenario;
 
 /** @brief Pobiera int z argv. */
 static int argi(int argc, char** argv, const char* k, int d) {
     for (int i = 1; i + 1 < argc; ++i) if (std::string(argv[i]) == k) return std::atoi(argv[i + 1]);
+    return d;
+}
+
+static std::string args(int argc, char** argv, const char* k, const std::string& d) {
+    for (int i = 1; i + 1 < argc; ++i) if (std::string(argv[i]) == k) return argv[i + 1];
     return d;
 }
 
@@ -124,7 +130,8 @@ static void petla_okienka(int worker_id, int leader, int time_scale) {
             if (erc != SERWIS_IPC_OK) { if (serwis_get_pozar()) break; continue; }
             int los = serwis_losuj_int(&seed, 0, 99);
             int akcept = 0;
-            if (serwis_klient_zgadza_sie_na_rozszerzenie(los, 20)) akcept = 1;
+            int prog_odmowy = (g_scenario == "T4") ? 50 : 20;
+            if (serwis_klient_zgadza_sie_na_rozszerzenie(los, prog_odmowy)) akcept = 1;
             serwis_logf("pracownik", "dodatkowe id=%d st=%d czas=%d koszt=%d akcept=%d",
                         er.id_klienta, er.stanowisko_id, er.czas_dod, er.koszt_dod, akcept);
             SerwisExtraResp resp{};
@@ -187,10 +194,13 @@ static void petla_okienka(int worker_id, int leader, int time_scale) {
         }
 
         int los = serwis_losuj_int(&seed, 0, 99);
-        if (!serwis_klient_akceptuje_warunki(los, 2)) {
-            serwis_logf("pracownik", "odrzut oferty los=%d", los);
-            continue;
+        if (g_scenario != "A_ONLY") {
+            if (!serwis_klient_akceptuje_warunki(los, 2)) {
+                serwis_logf("pracownik", "odrzut oferty los=%d", los);
+                continue;
+            }
         }
+
 
         int stid = wybierz_stanowisko(s.marka, &seed);
         if (stid == -1) {
@@ -237,6 +247,7 @@ int main(int argc, char** argv) {
     K2 = argi(argc, argv, "--k2", K2);
     int time_scale = argi(argc, argv, "--time_scale", 10);
     int workers = argi(argc, argv, "--workers", 3);
+    g_scenario = args(argc, argv, "--scenario", "");
     if (workers < 1) workers = 1;
     if (workers > 3) workers = 3;
     serwis_time_scale_set(time_scale);
