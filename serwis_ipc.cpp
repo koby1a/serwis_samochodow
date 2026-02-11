@@ -48,9 +48,12 @@ static const long MSGT_EXT_REQ = 1;
 static const size_t QUEUE_RESERVE_BYTES = 1024;
 
 static int kolejka_wolne_bajty(int qid, size_t* free_out, size_t* max_out) {
+    if (qid < 0) return -1;
     struct msqid_ds ds{};
     if (msgctl(qid, IPC_STAT, &ds) == -1) {
-        perror("[IPC] msgctl IPC_STAT");
+        if (errno != EIDRM && errno != EINVAL) {
+            perror("[IPC] msgctl IPC_STAT");
+        }
         return -1;
     }
     size_t qbytes = (size_t)ds.msg_qbytes;
@@ -62,9 +65,12 @@ static int kolejka_wolne_bajty(int qid, size_t* free_out, size_t* max_out) {
 }
 
 static int kolejka_liczba_msg(int qid, unsigned long* out) {
+    if (qid < 0) return -1;
     struct msqid_ds ds{};
     if (msgctl(qid, IPC_STAT, &ds) == -1) {
-        perror("[IPC] msgctl IPC_STAT");
+        if (errno != EIDRM && errno != EINVAL) {
+            perror("[IPC] msgctl IPC_STAT");
+        }
         return -1;
     }
     if (out) *out = ds.msg_qnum;
@@ -137,11 +143,6 @@ static int sem_zablokuj() {
         if (errno == EINTR) return -2;
 
         if (errno == EINVAL) {
-            static int printed = 0;
-            if (!printed) {
-                printed = 1;
-                perror("[IPC] semop lock (EINVAL)");
-            }
             return -3;
         }
 
@@ -165,11 +166,6 @@ static int sem_odblokuj() {
         if (errno == EINTR) return -2;
 
         if (errno == EINVAL) {
-            static int printed = 0;
-            if (!printed) {
-                printed = 1;
-                perror("[IPC] semop unlock (EINVAL)");
-            }
             return -3;
         }
 

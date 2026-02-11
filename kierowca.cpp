@@ -73,12 +73,10 @@ int main(int argc, char** argv) {
     serwis_logf("kierowca", "start n=%d seed=%u scen=%s", n, seed, scenario.c_str());
 
     std::vector<Samochod> fixed;
-    bool burst_mode = false;
     if (scenario == "T1") {
-        const char brands[] = {'A','E','I','O','U','U','U','Y','Y','Y','B','C','Z'};
-        for (char b : brands) {
+        for (int i = 0; i < n; ++i) {
             Samochod s{};
-            s.marka = b;
+            s.marka = 'A';
             s.czas_przyjazdu = serwis_time_get();
             s.krytyczna = 0;
             s.krytyczna_typ = 0;
@@ -118,47 +116,16 @@ int main(int argc, char** argv) {
             s.czas_naprawy = 0;
             fixed.push_back(s);
         }
-    } else if (scenario == "A_ONLY") {
-        for (int i = 0; i < n; ++i) {
-            Samochod s{};
-            s.marka = 'A';
-            s.czas_przyjazdu = serwis_time_get();
-            s.krytyczna = 0;
-            s.krytyczna_typ = 0;
-            s.czas_naprawy = 0;
-            fixed.push_back(s);
-        }
-    } else if (scenario == "TIME_GATES") {
-        Samochod s1{}; s1.marka='A'; s1.czas_przyjazdu=400; s1.krytyczna=1; s1.krytyczna_typ=1; fixed.push_back(s1);
-        Samochod s2{}; s2.marka='E'; s2.czas_przyjazdu=450; s2.krytyczna=0; s2.krytyczna_typ=0; fixed.push_back(s2); // do otwarcia = 30
-        Samochod s3{}; s3.marka='I'; s3.czas_przyjazdu=460; s3.krytyczna=0; s3.krytyczna_typ=0; fixed.push_back(s3); // do otwarcia = 20
-        Samochod s4{}; s4.marka='O'; s4.czas_przyjazdu=490; s4.krytyczna=0; s4.krytyczna_typ=0; fixed.push_back(s4);
-        Samochod s5{}; s5.marka='U'; s5.czas_przyjazdu=970; s5.krytyczna=0; s5.krytyczna_typ=0; fixed.push_back(s5);
-        Samochod s6{}; s6.marka='Y'; s6.czas_przyjazdu=990; s6.krytyczna=1; s6.krytyczna_typ=2; fixed.push_back(s6);
-        if ((int)fixed.size() < n) {
-            int extra = n - (int)fixed.size();
-            for (int i = 0; i < extra; ++i) {
-                Samochod s{};
-                s.marka = (char)('A' + serwis_losuj_int(&seed, 0, 25));
-                s.czas_przyjazdu = serwis_time_get();
-                s.krytyczna = 0;
-                s.krytyczna_typ = 0;
-                s.czas_naprawy = 0;
-                fixed.push_back(s);
-            }
-        }
-    } else if (scenario == "BURST_K1K2") {
-        burst_mode = true;
     }
 
     int sent = 0;
     int children = 0;
     int start_sem = -1;
-    bool handled_a_only = false;
+    bool handled_sync = false;
 
-    std::vector<pid_t> a_only_pids;
-    if (scenario == "A_ONLY" || scenario == "T2" || scenario == "T3" || scenario == "T4") {
-        if (scenario == "A_ONLY") serwis_logf("kierowca", "A_ONLY start: target=%d", n);
+    std::vector<pid_t> sync_pids;
+    if (scenario == "T1" || scenario == "T2" || scenario == "T3" || scenario == "T4") {
+        if (scenario == "T1") serwis_logf("kierowca", "T1 start: target=%d", n);
         if (scenario == "T2") serwis_logf("kierowca", "T2 start: target=%d", n);
         if (scenario == "T3") serwis_logf("kierowca", "T3 start: target=%d", n);
         if (scenario == "T4") serwis_logf("kierowca", "T4 start: target=%d", n);
@@ -187,8 +154,8 @@ int main(int argc, char** argv) {
                 break;
             }
             children++;
-            a_only_pids.push_back(pid);
-            if (scenario == "A_ONLY") serwis_logf("kierowca", "A_ONLY fork pid=%d idx=%d/%d", (int)pid, sent + 1, n);
+            sync_pids.push_back(pid);
+            if (scenario == "T1") serwis_logf("kierowca", "T1 fork pid=%d idx=%d/%d", (int)pid, sent + 1, n);
             if (scenario == "T2") serwis_logf("kierowca", "T2 fork pid=%d idx=%d/%d", (int)pid, sent + 1, n);
             if (scenario == "T3") serwis_logf("kierowca", "T3 fork pid=%d idx=%d/%d", (int)pid, sent + 1, n);
             if (scenario == "T4") serwis_logf("kierowca", "T4 fork pid=%d idx=%d/%d", (int)pid, sent + 1, n);
@@ -196,7 +163,7 @@ int main(int argc, char** argv) {
             ++sent;
         }
 
-        for (int i = 0; i < 100 && !g_stop; ++i) usleep(100000);
+        if (!g_stop) sleep(10);
         if (!g_stop && start_sem != -1) {
             struct sembuf op{}; op.sem_num = 0; op.sem_op = 1; op.sem_flg = 0;
             for (int i = 0; i < children; ++i) (void)semop(start_sem, &op, 1);
@@ -206,10 +173,10 @@ int main(int argc, char** argv) {
             g_start_sem = -1;
         }
 
-        handled_a_only = true;
+        handled_sync = true;
     }
 
-    if (!handled_a_only) {
+    if (!handled_sync) {
         for (size_t i = 0; i < fixed.size() && sent < n && !serwis_get_pozar(); ++i, ++sent) {
             if (g_stop) break;
             pid_t pid = fork();
@@ -227,37 +194,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    if (!handled_a_only && burst_mode && !serwis_get_pozar() && !g_stop) {
-        const int bursts[] = {4, 10, 2, 7, 1, 6};
-        const char brands[] = {'A','E','I','O','U','Y'};
-        for (int b = 0; b < (int)(sizeof(bursts)/sizeof(bursts[0])); ++b) {
-            int count = bursts[b];
-            for (int i = 0; i < count && !serwis_get_pozar(); ++i) {
-                if (g_stop) break;
-                Samochod s{};
-                s.marka = brands[serwis_losuj_int(&seed, 0, 5)];
-                s.czas_przyjazdu = serwis_time_get();
-                s.krytyczna = 0;
-                s.krytyczna_typ = 0;
-                s.czas_naprawy = 0;
-                pid_t pid = fork();
-                if (pid == 0) {
-                    (void)serwis_ipc_send_zgl(s);
-                    _exit(0);
-                }
-                if (pid > 0) {
-                    children++;
-                    int status = 0;
-                    while (waitpid(-1, &status, WNOHANG) > 0) children--;
-                }
-                sent++;
-                serwis_sleep_ms_scaled(sleep_ms, time_scale);
-            }
-            serwis_sleep_ms_scaled(1500, time_scale);
-        }
-    }
-
-    for (; !handled_a_only && sent < n && !serwis_get_pozar(); ++sent) {
+    for (; !handled_sync && sent < n && !serwis_get_pozar(); ++sent) {
         if (g_stop) break;
         Samochod s{};
         s.marka = (char)('A' + serwis_losuj_int(&seed, 0, 25));
@@ -287,7 +224,7 @@ int main(int argc, char** argv) {
     }
 
     if (g_stop || serwis_get_pozar()) {
-        for (pid_t pid : a_only_pids) if (pid > 0) kill(pid, SIGTERM);
+        for (pid_t pid : sync_pids) if (pid > 0) kill(pid, SIGTERM);
     }
 
     // Doczysc wszystkie pozostale dzieci.
