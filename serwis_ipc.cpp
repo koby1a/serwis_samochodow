@@ -305,6 +305,26 @@ void serwis_ipc_cleanup_all() {
     shm_id = sem_id = -1;
 }
 
+void serwis_ipc_clear_queues() {
+    auto clear_q = [](int qid) {
+        if (qid < 0) return;
+        struct { long mtype; char mtext[4096]; } msg{};
+        while (true) {
+            ssize_t r = msgrcv(qid, &msg, sizeof(msg.mtext), 0, IPC_NOWAIT | MSG_NOERROR);
+            if (r >= 0) continue;
+            if (errno == ENOMSG) break;
+            if (errno == EINTR) continue;
+            break;
+        }
+    };
+    clear_q(q_zgl);
+    clear_q(q_zlec);
+    clear_q(q_rap);
+    clear_q(q_kasa);
+    clear_q(q_ext_req);
+    clear_q(q_ext_resp);
+}
+
 int serwis_ipc_send_zgl(const Samochod& s) {
     MsgZgl m{}; m.mtype = MSGT_ZGL_DATA; m.shutdown = 0; m.s = s;
     if (czekaj_na_miejsce_w_kolejce(q_zgl, sizeof(MsgZgl) - sizeof(long)) != 0) return SERWIS_IPC_ERR;

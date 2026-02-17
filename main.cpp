@@ -16,9 +16,23 @@
 #include "logger.h"
 
 static volatile sig_atomic_t g_stop = 0;
-
 static void obsluz_sig(int sig) {
-    if (sig == SIGINT || sig == SIGTERM) g_stop = 1;
+    if (sig == SIGINT || sig == SIGTERM) {
+        g_stop = 1;
+        return;
+    }
+    if (sig == SIGTSTP) {
+        // Zatrzymaj cala grupe procesow (bezpieczna pauza dla Ctrl+Z).
+        pid_t pg = getpgrp();
+        if (pg > 0) (void)kill(-pg, SIGSTOP);
+        return;
+    }
+    if (sig == SIGCONT) {
+        // Wznow cala grupe procesow po fg/CONT.
+        pid_t pg = getpgrp();
+        if (pg > 0) (void)kill(-pg, SIGCONT);
+        return;
+    }
 }
 
 static pid_t uruchom_program(const char* prog, const std::vector<std::string>& args) {
@@ -103,6 +117,7 @@ int main(int argc, char** argv) {
     serwis_logger_reset_file();
 
     if (serwis_ipc_init() != SERWIS_IPC_OK) return 1;
+    serwis_ipc_clear_queues();
 
     struct sigaction sa{};
     sa.sa_handler = obsluz_sig;
@@ -176,6 +191,7 @@ int main(int argc, char** argv) {
         "--scenario", cfg.scenario
     });
     kids.push_back(pid_kierowca);
+
 
     std::atomic<int> alive((int)kids.size());
     std::atomic<int> kierowca_alive(1);

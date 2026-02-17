@@ -61,6 +61,9 @@ void serwis_ipc_detach();
 /** @brief Usuwa zasoby IPC (kolejki/shm/sem). */
 void serwis_ipc_cleanup_all();
 
+/** @brief Czyści wszystkie kolejki IPC z zaległych komunikatów. */
+void serwis_ipc_clear_queues();
+
 /** @brief Wysyla zgloszenie samochodu do pracownika. */
 int serwis_ipc_send_zgl(const Samochod& s);
 /** @brief Wysyla komunikat zakonczenia do pracownika (brak dalszych zgloszen). */
