@@ -4,7 +4,6 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/ipc.h>
-#include <sys/sem.h>
 #include <csignal>
 #include <cerrno>
 #include "serwis_ipc.h"
@@ -25,11 +24,10 @@ static std::string args(int argc, char** argv, const std::string& k, const std::
     return d;
 }
 
-union semun { int val; struct semid_ds* buf; unsigned short* array; };
-
 static volatile sig_atomic_t g_stop = 0;
 static volatile sig_atomic_t g_child_stop = 0;
-static int g_start_sem = -1;
+static int g_start_fd_r = -1;
+static int g_start_fd_w = -1;
 static pid_t g_parent_pid = -1;
 
 static void on_sig(int) {
@@ -40,10 +38,12 @@ static void on_child_sig(int) {
     g_child_stop = 1;
 }
 
-static void cleanup_start_sem() {
-    if (g_start_sem != -1 && getpid() == g_parent_pid) {
-        (void)semctl(g_start_sem, 0, IPC_RMID);
-        g_start_sem = -1;
+static void cleanup_start_pipe() {
+    if (getpid() == g_parent_pid) {
+        if (g_start_fd_r != -1) close(g_start_fd_r);
+        if (g_start_fd_w != -1) close(g_start_fd_w);
+        g_start_fd_r = -1;
+        g_start_fd_w = -1;
     }
 }
 
@@ -125,7 +125,8 @@ int main(int argc, char** argv) {
 
     int sent = 0;
     int children = 0;
-    int start_sem = -1;
+    int start_r = -1;
+    int start_w = -1;
     bool handled_sync = false;
 
     std::vector<pid_t> sync_pids;
@@ -134,14 +135,15 @@ int main(int argc, char** argv) {
         if (scenario == "T2") serwis_logf("kierowca", "T2 start: target=%d", n);
         if (scenario == "T3") serwis_logf("kierowca", "T3 start: target=%d", n);
         if (scenario == "T4") serwis_logf("kierowca", "T4 start: target=%d", n);
-        start_sem = semget(IPC_PRIVATE, 1, 0600 | IPC_CREAT);
-        if (start_sem == -1) {
-            perror("[kierowca] semget start");
+        int fds[2] = {-1, -1};
+        if (pipe(fds) != 0) {
+            perror("[kierowca] pipe start");
         } else {
-            semun u{}; u.val = 0;
-            if (semctl(start_sem, 0, SETVAL, u) == -1) perror("[kierowca] semctl SETVAL");
+            start_r = fds[0];
+            start_w = fds[1];
         }
-        g_start_sem = start_sem;
+        g_start_fd_r = start_r;
+        g_start_fd_w = start_w;
 
         size_t i = 0;
         while (i < fixed.size() && sent < n && !serwis_get_pozar() && !g_stop) {
@@ -154,9 +156,13 @@ int main(int argc, char** argv) {
                 (void)sigaction(SIGTERM, &sa_child, nullptr);
                 (void)sigaction(SIGINT, &sa_child, nullptr);
 
-                if (start_sem != -1) {
-                    struct sembuf op{}; op.sem_num = 0; op.sem_op = -1; op.sem_flg = 0;
-                    while (semop(start_sem, &op, 1) == -1) {
+                if (start_r != -1) {
+                    if (start_w != -1) close(start_w);
+                    char b = 0;
+                    while (true) {
+                        ssize_t r = read(start_r, &b, 1);
+                        if (r == 1) break;
+                        if (r == 0) _exit(0);
                         if (errno == EINTR) continue;
                         _exit(0);
                     }
@@ -180,13 +186,16 @@ int main(int argc, char** argv) {
         }
 
         if (!g_stop) sleep(10);
-        if (!g_stop && start_sem != -1) {
-            struct sembuf op{}; op.sem_num = 0; op.sem_op = 1; op.sem_flg = 0;
-            for (int i = 0; i < children; ++i) (void)semop(start_sem, &op, 1);
-        } else if (g_stop && start_sem != -1) {
-            // przerwij semafor, zeby dzieci wyszly z semop
-            (void)semctl(start_sem, 0, IPC_RMID);
-            g_start_sem = -1;
+        if (!g_stop && start_w != -1) {
+            for (int i = 0; i < children; ++i) (void)write(start_w, "x", 1);
+            close(start_w);
+            start_w = -1;
+            g_start_fd_w = -1;
+        } else if (g_stop && start_w != -1) {
+            // zamknij pipe, zeby dzieci wyszly z read
+            close(start_w);
+            start_w = -1;
+            g_start_fd_w = -1;
         }
 
         handled_sync = true;
@@ -249,7 +258,7 @@ int main(int argc, char** argv) {
         if (waitpid(-1, &status, 0) > 0) children--;
         else break;
     }
-    cleanup_start_sem();
+    cleanup_start_pipe();
 
     if (!serwis_get_pozar()) {
         if (workers < 1) workers = 1;

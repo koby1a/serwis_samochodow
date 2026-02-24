@@ -12,6 +12,7 @@
 #include <sys/sem.h>
 
 #include <unistd.h>
+#include <fcntl.h>
 #include <libgen.h>
 #include <limits.h>
 #include <cstddef>
@@ -93,40 +94,26 @@ static int czekaj_na_miejsce_w_kolejce(int qid, size_t msg_size) {
     }
 }
 
-/** @brief Pobiera katalog pliku wykonywalnego (stabilne ftok). */
-static const char* exe_dir() {
-    static char dir_buf[PATH_MAX];
+/** @brief Plik klucza IPC w /tmp (stabilny i wspoldzielony dla wszystkich procesow). */
+static const char* ipc_key_file() {
+    static char path_buf[PATH_MAX];
     static int inited = 0;
-    if (inited) return dir_buf;
+    if (inited) return path_buf;
 
-    char path_buf[PATH_MAX];
-    ssize_t n = readlink("/proc/self/exe", path_buf, sizeof(path_buf) - 1);
-    if (n <= 0) {
-        std::strcpy(dir_buf, ".");
-        inited = 1;
-        return dir_buf;
-    }
-
-    path_buf[n] = '\0';
-    std::strncpy(dir_buf, path_buf, sizeof(dir_buf) - 1);
-    dir_buf[sizeof(dir_buf) - 1] = '\0';
-
-    char* d = dirname(dir_buf);
-    if (!d) {
-        std::strcpy(dir_buf, ".");
-    } else {
-        std::strncpy(dir_buf, d, sizeof(dir_buf) - 1);
-        dir_buf[sizeof(dir_buf) - 1] = '\0';
-    }
-
+    std::snprintf(path_buf, sizeof(path_buf), "/tmp/serwis_samochodow_%d.key", (int)getuid());
+    int fd = open(path_buf, O_CREAT | O_RDWR, 0600);
+    if (fd >= 0) close(fd);
     inited = 1;
-    return dir_buf;
+    return path_buf;
 }
 
-/** @brief Tworzy klucz ftok na bazie katalogu exe (stabilne). */
+/** @brief Tworzy klucz ftok na bazie pliku klucza. */
 static key_t utworz_klucz(int id) {
-    key_t kk = ftok(exe_dir(), id);
-    if (kk == -1) perror("[IPC] ftok");
+    key_t kk = ftok(ipc_key_file(), id);
+    if (kk == -1 || kk == IPC_PRIVATE) {
+        perror("[IPC] ftok");
+        return -1;
+    }
     return kk;
 }
 

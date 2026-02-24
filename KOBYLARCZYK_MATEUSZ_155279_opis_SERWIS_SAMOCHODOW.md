@@ -127,123 +127,79 @@ Dodatkowo:
 
 Wszystkie funkcje systemowe będą miały obsługę błędów przez `perror()` i `errno`.
 
-## 7. Scenariusze testowe (min. 4, planowane 5)
+## 7. Scenariusze testowe (min. 4, zrealizowane 4)
 
-Poniżej opis testów, które będą zrealizowane i opisane w raporcie.
+Poniżej opis testów zrealizowanych i opisanych w raporcie.
 
 ---
 
-### Test T1 – 2000 samochodów tylko marki A
+### Test T1 – 5000 samochodów tylko marki A (start synchroniczny)
 
 **Cel:**  
-Sprawdzenie dużej liczby klientów jednej marki oraz poprawnego przydziału na stanowiska 1–7.
+Sprawdzenie wydajności systemu przy dużej liczbie zgłoszeń oraz zachowania kolejek przy jednoczesnym starcie wielu procesów‑kierowców.
 
 **Wejście:**
 
 - Serwis otwarty.
-- Generacja **2000** samochodów wyłącznie marki **A** (scenariusz `A_ONLY`).
+- Generacja **5000** samochodów wyłącznie marki **A** (scenariusz `T1`).
+- Start synchroniczny (wspólne zwolnienie procesów).
 
-**Oczekiwany wynik:**
+**Wynik (z raportu):**
 
 - brak odrzuceń z powodu nieobsługiwanej marki,
-- brak przydziału na stanowisko 8,
-- rozkład napraw na stanowiskach 1–7,
-- brak zakleszczeń, poprawne zakończenie symulacji.
+- brak odrzuceń z tytułu godzin pracy,
+- widoczny synchroniczny start w logach.
 
 ---
 
-### Test T2 – Kolejki i dynamiczne otwieranie okienek (burst)
+### Test T2 – 5000 krytycznych aut poza godzinami
 
 **Cel:**  
-Sprawdzenie progów **K1** i **K2** przy otwieraniu/zamykaniu okienek obsługi.
+Sprawdzenie reguły „poza godzinami przyjmujemy tylko krytyczne usterki” oraz filtrowania marek do obsługiwanych.
 
 **Wejście:**
 
-- Serwis otwarty, parametry: `K1 = 3`, `K2 = 5`.
-- Seria „burstów” przyjazdów: **4**, **10**, **2**, **7**, **1**, **6** (scenariusz `BURST_K1K2`).
+- Serwis poza godzinami pracy.
+- Generacja **5000** samochodów krytycznych (scenariusz `T2`).
 
-**Oczekiwany wynik:**
+**Wynik (z raportu):**
 
-- po przekroczeniu **K1** otwiera się 2. okienko; zamyka się, gdy kolejka ≤2,
-- po przekroczeniu **K2** otwiera się 3. okienko; zamyka się, gdy kolejka ≤3,
-- zawsze działa co najmniej jedno okienko,
-- zdarzenia otwarcia/zamknięcia są zapisane w logu (`okienko_open` / `okienko_close`).
+- brak odrzuceń z powodu godzin pracy (wszystkie auta krytyczne),
+- brak odrzuceń z powodu nieobsługiwanej marki,
+- stabilna obsługa dużej liczby zgłoszeń.
 
 ---
 
-### Test T3 – Bramka czasu + usterki krytyczne (deterministyczne)
+### Test T3 – Obciążenie raportów/kasy (IPC)
 
 **Cel:**  
-Sprawdzenie warunków dopuszczenia klientów przed/po godzinach pracy w sposób deterministyczny.
+Przetestowanie, czy kolejki `rap` i `kasa` nie zapychają się przy maksymalnym przepływie raportów.
 
 **Wejście:**
 
-- Godziny pracy: `Tp = 8:00`, `Tk = 16:00`,
-- `T1 = 30` minut,
-- scenariusz `TIME_GATES` z ustalonymi czasami przyjazdu:
-    - 7:30 (do otwarcia = 30) – niekrytyczny,
-    - 7:40 (do otwarcia = 20) – niekrytyczny,
-    - 6:40 – krytyczny,
-    - 16:10 – niekrytyczny,
-    - 16:30 – krytyczny.
+- Scenariusz `T3` z minimalnym czasem napraw (maksymalny przepływ raportów).
 
-**Oczekiwany wynik:**
+**Wynik (z raportu):**
 
-- 7:30 niekrytyczny → odrzucony (do otwarcia = T1),
-- 7:40 niekrytyczny → przyjęty (do otwarcia < T1),
-- krytyczny przed otwarciem → przyjęty,
-- po zamknięciu niekrytyczny → odrzucony,
-- po zamknięciu krytyczny → przyjęty,
-- zachowanie odnotowane w logach.
+- szybki napływ raportów,
+- brak blokad i stabilna obsługa dużej liczby raportów.
 
 ---
 
-### Test T4 – Zamknięcie stanowiska i zmiana czasu naprawy (sygnały 1–3)
+### Test T4 – Dodatkowe usterki (100% akceptacji)
 
 **Cel:**  
-Sprawdzenie reakcji mechaników na sygnały:
-
-- `sygnał1` – zamknięcie stanowiska po bieżącej naprawie,
-- `sygnał2` – przyspieszenie napraw o 50%,
-- `sygnał3` – przywrócenie normalnego czasu.
+Przetestowanie komunikacji `ext_req`/`ext_resp` oraz wpływu zawsze‑akceptowanych rozszerzeń na czas/koszt napraw.
 
 **Wejście:**
 
-- kilka pojazdów w kolejce na dane stanowisko,
-- typowe czasy napraw (np. 10–20 jednostek czasu).
+- Scenariusz `T4` z wymuszoną akceptacją dodatkowych usterek.
 
-**Oczekiwany wynik:**
+**Wynik (z raportu):**
 
-- po `sygnał2` naprawy na danym stanowisku trwają ~50% krócej,
-- kolejne `sygnał2` są ignorowane, jeśli stanowisko już pracuje w trybie przyspieszonym,
-- `sygnał3` działa tylko po wcześniejszym `sygnał2` i przywraca normalne czasy,
-- po `sygnał1`:
-    - bieżąca naprawa jest dokańczana,
-    - po jej zakończeniu stanowisko nie przyjmuje nowych pojazdów,
-    - nowe pojazdy kierowane są na inne stanowiska.
-
----
-
-### Test T5 – Pożar (sygnał4) i awaryjne zatrzymanie serwisu
-
-**Cel:**  
-Sprawdzenie awaryjnego zatrzymania całej symulacji po `sygnał4` (pożar).
-
-**Wejście:**
-
-- Serwis w trakcie intensywnej pracy:
-    - kilka pojazdów w naprawie,
-    - klienci w kolejce,
-    - trwające obsługi/diagnozy/płatności.
-
-**Oczekiwany wynik:**
-
-- po `sygnał4`:
-    - wszystkie procesy (mechanicy, pracownicy, kasjer, kierowcy) kończą działanie,
-    - trwające naprawy są przerywane (nie kończą się normalnie),
-    - nie są przyjmowani nowi klienci,
-    - wszystkie zasoby IPC (pamięć dzielona, semafory, kolejki) są zwalniane,
-- w logach wyraźny wpis o pożarze i zamknięciu serwisu.
+- wszystkie dodatkowe usterki są akceptowane,
+- brak zacięć w kanałach `ext_req`/`ext_resp`,
+- stabilna obsługa przy dużej liczbie zgłoszeń.
 
 ---
 
@@ -261,8 +217,8 @@ Na podstawie tych logów będzie można zweryfikować poprawność działania or
 
 Linki do fragmentów kodu w repozytorium GitHub, obrazujących użycie wymaganych konstrukcji:
 
-- tworzenie procesów: `fork()` ([main.cpp#L25](https://github.com/koby1a/serwis_samochodow/blob/master/main.cpp#L25)), `execv()` ([main.cpp#L31](https://github.com/koby1a/serwis_samochodow/blob/master/main.cpp#L31)), `waitpid()` ([main.cpp#L197](https://github.com/koby1a/serwis_samochodow/blob/master/main.cpp#L197)), `exit()` ([tests/test_model.cpp#L5](https://github.com/koby1a/serwis_samochodow/blob/master/tests/test_model.cpp#L5)),
-- mechanizmy synchronizacji (semafory System V): `semget()` ([serwis_ipc.cpp#L262](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L262)), `semop()` ([serwis_ipc.cpp#L142](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L142)), `semctl()` ([serwis_ipc.cpp#L272](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L272)),
-- komunikacja międzyprocesowa: `msgget()` ([serwis_ipc.cpp#L222](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L222)), `msgsnd()` ([serwis_ipc.cpp#L321](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L321)), `msgrcv()` ([serwis_ipc.cpp#L341](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L341)), `shmget()` ([serwis_ipc.cpp#L241](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L241)), `shmat()` ([serwis_ipc.cpp#L257](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L257)), `shmdt()` ([serwis_ipc.cpp#L297](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L297)), `shmctl()` ([serwis_ipc.cpp#L310](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L310)),
-- obsługa sygnałów: `sigaction()` ([main.cpp#L111](https://github.com/koby1a/serwis_samochodow/blob/master/main.cpp#L111)), `sigaction()` mechanik ([mechanik.cpp#L27](https://github.com/koby1a/serwis_samochodow/blob/master/mechanik.cpp#L27)),
+- tworzenie procesów: `fork()` ([main.cpp#L39](https://github.com/koby1a/serwis_samochodow/blob/master/main.cpp#L39)), `execv()` ([main.cpp#L45](https://github.com/koby1a/serwis_samochodow/blob/master/main.cpp#L45)), `waitpid()` ([main.cpp#L213](https://github.com/koby1a/serwis_samochodow/blob/master/main.cpp#L213)), `exit()` ([tests/test_model.cpp#L5](https://github.com/koby1a/serwis_samochodow/blob/master/tests/test_model.cpp#L5)),
+- mechanizmy synchronizacji (semafory System V): `semget()` ([serwis_ipc.cpp#L252](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L252)), `semop()` ([serwis_ipc.cpp#L142](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L142)), `semctl()` ([serwis_ipc.cpp#L262](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L262)),
+- komunikacja międzyprocesowa: `msgget()` ([serwis_ipc.cpp#L212](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L212)), `msgsnd()` ([serwis_ipc.cpp#L331](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L331)), `msgrcv()` ([serwis_ipc.cpp#L351](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L351)), `shmget()` ([serwis_ipc.cpp#L231](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L231)), `shmat()` ([serwis_ipc.cpp#L247](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L247)), `shmdt()` ([serwis_ipc.cpp#L287](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L287)), `shmctl()` ([serwis_ipc.cpp#L300](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L300)),
+- obsługa sygnałów: `sigaction()` ([main.cpp#L126](https://github.com/koby1a/serwis_samochodow/blob/master/main.cpp#L126)), `sigaction()` mechanik ([mechanik.cpp#L27](https://github.com/koby1a/serwis_samochodow/blob/master/mechanik.cpp#L27)),
 - obsługa błędów: `perror()` ([serwis_ipc.cpp#L55](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L55)), `errno` ([serwis_ipc.cpp#L143](https://github.com/koby1a/serwis_samochodow/blob/master/serwis_ipc.cpp#L143)).
