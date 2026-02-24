@@ -130,8 +130,12 @@ static void petla_okienka(int worker_id, int leader, int time_scale) {
             if (erc != SERWIS_IPC_OK) { if (serwis_get_pozar()) break; continue; }
             int los = serwis_losuj_int(&seed, 0, 99);
             int akcept = 0;
-            int prog_odmowy = (g_scenario == "T4") ? 50 : 20;
-            if (serwis_klient_zgadza_sie_na_rozszerzenie(los, prog_odmowy)) akcept = 1;
+            if (g_scenario == "T4") {
+                akcept = 1;
+            } else {
+                int prog_odmowy = 20;
+                if (serwis_klient_zgadza_sie_na_rozszerzenie(los, prog_odmowy)) akcept = 1;
+            }
             serwis_logf("pracownik", "dodatkowe id=%d st=%d czas=%d koszt=%d akcept=%d",
                         er.id_klienta, er.stanowisko_id, er.czas_dod, er.koszt_dod, akcept);
             SerwisExtraResp resp{};

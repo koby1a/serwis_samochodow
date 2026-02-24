@@ -28,11 +28,16 @@ static std::string args(int argc, char** argv, const std::string& k, const std::
 union semun { int val; struct semid_ds* buf; unsigned short* array; };
 
 static volatile sig_atomic_t g_stop = 0;
+static volatile sig_atomic_t g_child_stop = 0;
 static int g_start_sem = -1;
 static pid_t g_parent_pid = -1;
 
 static void on_sig(int) {
     g_stop = 1;
+}
+
+static void on_child_sig(int) {
+    g_child_stop = 1;
 }
 
 static void cleanup_start_sem() {
@@ -142,11 +147,22 @@ int main(int argc, char** argv) {
         while (i < fixed.size() && sent < n && !serwis_get_pozar() && !g_stop) {
             pid_t pid = fork();
             if (pid == 0) {
+                struct sigaction sa_child{};
+                sa_child.sa_handler = on_child_sig;
+                sigemptyset(&sa_child.sa_mask);
+                sa_child.sa_flags = 0;
+                (void)sigaction(SIGTERM, &sa_child, nullptr);
+                (void)sigaction(SIGINT, &sa_child, nullptr);
+
                 if (start_sem != -1) {
                     struct sembuf op{}; op.sem_num = 0; op.sem_op = -1; op.sem_flg = 0;
-                    if (semop(start_sem, &op, 1) == -1) _exit(0);
+                    while (semop(start_sem, &op, 1) == -1) {
+                        if (errno == EINTR) continue;
+                        _exit(0);
+                    }
                 }
                 (void)serwis_ipc_send_zgl(fixed[i]);
+                while (!g_child_stop) pause();
                 _exit(0);
             }
             if (pid < 0) {

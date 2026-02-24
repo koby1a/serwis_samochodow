@@ -51,7 +51,7 @@ Weryfikacja:
 - brak zacięć kolejek `rap` i `kasa`,
 - poprawna kolejność logów płatności po zakończeniu (kasjer buforuje).
 
-## T4 – Dodatkowe usterki (50/50)
+## T4 – Dodatkowe usterki (100% akceptacji)
 
 Start:
 ```
@@ -59,5 +59,5 @@ Start:
 ```
 
 Weryfikacja:
-- widoczne zarówno akceptacje, jak i odrzucenia dodatkowych usterek,
+- wszystkie dodatkowe usterki są akceptowane,
 - brak zacięć w kanałach `ext_req` / `ext_resp`.
