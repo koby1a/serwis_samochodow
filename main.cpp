@@ -16,9 +16,11 @@
 #include "logger.h"
 
 static volatile sig_atomic_t g_stop = 0;
+static volatile sig_atomic_t g_instant = 0;
 static void obsluz_sig(int sig) {
     if (sig == SIGINT || sig == SIGTERM) {
         g_stop = 1;
+        g_instant = 1;
         return;
     }
     if (sig == SIGTSTP) {
@@ -236,10 +238,28 @@ int main(int argc, char** argv) {
 
     serwis_log("main", "zakonczenie symulacji - czyszczenie");
     serwis_set_pozar(1);
-    for (pid_t k : kids) if (k > 0) kill(k, SIGKILL);
-    if (hard_exit) {
-        serwis_ipc_cleanup_all();
-        _exit(0);
+
+    if (g_instant) {
+        for (pid_t k : kids) if (k > 0) kill(k, SIGKILL);
+    } else {
+        for (pid_t k : kids) if (k > 0) kill(k, SIGINT);
+    }
+
+    if (!g_instant) {
+        if (pid_kierowca > 0) {
+            for (int i = 0; i < 300; ++i) { // do ~30s
+                if (kierowca_alive.load() == 0) break;
+                usleep(100000);
+            }
+        }
+        for (int i = 0; i < 600 && alive.load() > 0; ++i) {
+            usleep(100000); // 0.1s, lacznie do ~60s
+            if (g_stop && kierowca_alive.load() == 0 && alive.load() == 0) break;
+        }
+
+        if (alive.load() > 0) {
+            for (pid_t k : kids) if (k > 0) kill(k, SIGKILL);
+        }
     }
 
     if (reaper.joinable()) reaper.join();
