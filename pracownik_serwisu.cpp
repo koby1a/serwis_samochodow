@@ -201,7 +201,11 @@ static void petla_okienka(int worker_id, int leader, int time_scale) {
         }
 
         int los = serwis_losuj_int(&seed, 0, 99);
-        if (g_scenario != "A_ONLY") {
+        if (g_scenario != "A_ONLY" &&
+            g_scenario != "T1" &&
+            g_scenario != "T2" &&
+            g_scenario != "T3" &&
+            g_scenario != "T4") {
             if (!serwis_klient_akceptuje_warunki(los, 2)) {
                 serwis_logf("pracownik", "odrzut oferty los=%d", los);
                 continue;

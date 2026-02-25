@@ -56,7 +56,7 @@ struct SimConfig {
     int sim_tick_ms = 200;
     int sim_step_min = 1;
     int time_offset_range = 180;
-    int time_scale = 10; //zmiana sakalowania czasu 1-zblizone do normalnego 10-bardzo szybki czas dzialania serwisu
+    int time_scale = 1; //zmiana sakalowania czasu 1-zblizone do normalnego 10-bardzo szybki czas dzialania serwisu
     int workers = 3;
     int tp = 8 * 60;
     int tk = 16 * 60;
