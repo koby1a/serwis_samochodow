@@ -120,6 +120,9 @@ static void petla_okienka(int worker_id, int leader, int time_scale) {
             if (rr != SERWIS_IPC_OK) { if (serwis_get_pozar()) break; continue; }
             serwis_logf("pracownik", "odbior_formularza id=%d st=%d koszt=%d czas=%d",
                         r.id_klienta, r.stanowisko_id, r.koszt, r.czas);
+            if (r.s.pid_klienta > 0) {
+                (void)kill(r.s.pid_klienta, SIGTERM);
+            }
             (void)serwis_ipc_send_kasa(r);
         }
 

@@ -167,6 +167,7 @@ int main(int argc, char** argv) {
                         _exit(0);
                     }
                 }
+                fixed[i].pid_klienta = (int)getpid();
                 (void)serwis_ipc_send_zgl(fixed[i]);
                 while (!g_child_stop) pause();
                 _exit(0);

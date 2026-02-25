@@ -14,6 +14,7 @@ struct Samochod {
     int czas_naprawy;    // opcjonalnie
     int krytyczna;       // 0/1
     int krytyczna_typ;   // 0=brak, 1..3 typ krytyczny
+    int pid_klienta;     // PID procesu klienta (0=brak)
 };
 
 /** @brief Pojedyncza usluga w cenniku. */
