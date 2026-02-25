@@ -220,12 +220,14 @@ int main(int argc, char** argv) {
     });
 
     int sim_time = cfg.sim_start_min;
+    bool hard_exit = false;
     while (true) {
         if (g_stop) {
             serwis_set_pozar(1);
+            hard_exit = true;
             break;
         }
-        if (serwis_get_pozar()) break;
+        if (serwis_get_pozar()) { hard_exit = true; break; }
         serwis_sleep_ms_scaled(cfg.sim_tick_ms, cfg.time_scale);
         sim_time += cfg.sim_step_min;
         if (sim_time >= 1440) sim_time %= 1440;
@@ -234,23 +236,10 @@ int main(int argc, char** argv) {
 
     serwis_log("main", "zakonczenie symulacji - czyszczenie");
     serwis_set_pozar(1);
-    for (pid_t k : kids) if (k > 0) kill(k, SIGINT);
-
-    // Najpierw poczekaj, az kierowca posprzata swoje dzieci (bez tego IPC moze zostac uzyte po cleanupie).
-    if (pid_kierowca > 0) {
-        for (int i = 0; i < 300; ++i) { // do ~30s
-            if (kierowca_alive.load() == 0) break;
-            usleep(100000);
-        }
-    }
-    // Daj pozostalych czas na czyste wyjscie.
-    for (int i = 0; i < 600 && alive.load() > 0; ++i) {
-        usleep(100000); // 0.1s, lacznie do ~60s
-        if (g_stop && kierowca_alive.load() == 0 && alive.load() == 0) break;
-    }
-
-    if (alive.load() > 0) {
-        for (pid_t k : kids) if (k > 0) kill(k, SIGKILL);
+    for (pid_t k : kids) if (k > 0) kill(k, SIGKILL);
+    if (hard_exit) {
+        serwis_ipc_cleanup_all();
+        _exit(0);
     }
 
     if (reaper.joinable()) reaper.join();
